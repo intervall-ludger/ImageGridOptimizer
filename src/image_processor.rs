@@ -1,5 +1,5 @@
 use std::fs;
-use image::{DynamicImage, GenericImage, GenericImageView};
+use image::{DynamicImage, GenericImage, GenericImageView, Rgba};
 use image::imageops;
 
 /// Adds a white border around the given image.
@@ -106,30 +106,34 @@ fn place_image(mut collage: DynamicImage, new_image: DynamicImage) -> DynamicIma
     let (new_width, new_height) = new_image.dimensions();
     let mut min_width = width;
     let mut min_height = height;
-    let mut min_area = new_width * new_height;
+    let mut min_scope = 2 * new_width + 2 * new_height;
     let mut found = false;
 
     for y in 0..height {
         for x in 0..width {
+            let pixel = collage.get_pixel(x, y);
+            if pixel[0] != 0 || pixel[1] != 0 || pixel[2] != 0 {
+                continue;
+            }
             if is_empty_space(&collage, x, y, new_width, new_height) {
                 if x + new_width <= width && y + new_height <= height {
                     collage.copy_from(&new_image, x, y).unwrap();
-                    return collage;
+                    return collage
                 }
-                let tmp_width = x + new_width + 1;
-                let tmp_height = y + new_height + 1;
-                if min_width < width{
-                    min_width = width;
+                let mut tmp_width = x + new_width + 1;
+                let mut tmp_height = y + new_height + 1;
+                if tmp_width < width{
+                    tmp_width = width;
                 }
-                if min_height < height{
-                    min_height = height;
+                if tmp_height < height{
+                    tmp_height = height;
                 }
-                let area = (tmp_height * tmp_width) - (width * height);
-                if area < min_area{
+                let scope_delta = (2 * tmp_height + 2 * tmp_width) - (2 * width + 2 * height);
+                if scope_delta < min_scope{
                     min_width = tmp_width;
                     min_height = tmp_height;
                     found = true;
-                    min_area = area;
+                    min_scope = scope_delta;
                 }
             }
         }
@@ -149,8 +153,6 @@ fn place_image(mut collage: DynamicImage, new_image: DynamicImage) -> DynamicIma
             new_collage.copy_from(&collage, 0, 0).unwrap();
             return place_image(new_collage, new_image)
         }
-
-
     }
 }
 
@@ -187,6 +189,7 @@ fn is_empty_space(collage: &DynamicImage, x: u32, y: u32, mut width: u32, mut he
     }
     true
 }
+
 
 /// Processes images from a directory and creates a collage.
 ///
