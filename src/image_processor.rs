@@ -1,6 +1,8 @@
 use std::fs;
-use image::{DynamicImage, GenericImage, GenericImageView, Rgba};
+use image::{DynamicImage, GenericImage, GenericImageView, ImageBuffer, Rgba};
 use image::imageops;
+use image::{imageops::resize};
+use image::imageops::FilterType;
 
 /// Adds a white border around the given image.
 ///
@@ -52,7 +54,8 @@ fn load_images(dir: &str, filter: Option<String>) -> Vec<DynamicImage> {
             let path = entry.path();
             if path.is_file() && (filter.is_none()
                 || path.extension().and_then(|s| s.to_str()).map_or(false, |ext| ext == filter.as_ref().unwrap())) {
-                let img = image::open(&path).expect("Failed to open image");
+                let mut img = image::open(&path).expect("Failed to open image");
+                img = DynamicImage::from(scale_to_standard_width(img, 500));
                 Some(add_white_border(&img, BORDER_SIZE))
             } else {
                 None
@@ -220,6 +223,27 @@ fn is_empty_space(collage: &DynamicImage, x: u32, y: u32, mut width: u32, mut he
         }
     }
     true
+}
+
+
+/// Scales an image to a standard width while maintaining its aspect ratio.
+///
+/// # Parameters
+///
+/// - `img`: The image to be scaled.
+/// - `standard_width`: The standard width to scale the image to.
+///
+/// # Returns
+///
+/// A new image scaled to the standard width.
+fn scale_to_standard_width(img: DynamicImage, standard_width: u32) -> ImageBuffer<Rgba<u8>, Vec<u8>> {
+    let (current_width, current_height) = img.dimensions();
+
+    // Calculate the new height while maintaining the aspect ratio.
+    let new_height = (standard_width as f64 / current_width as f64 * current_height as f64) as u32;
+
+    // Resize the image.
+    resize(&img, standard_width, new_height, FilterType::Lanczos3)
 }
 
 
