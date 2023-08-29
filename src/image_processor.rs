@@ -94,7 +94,7 @@ fn load_images(
 ///
 /// A single image representing the collage.
 fn create_collage(mut images: Vec<DynamicImage>) -> DynamicImage {
-    let DEBUG = true;
+    let DEBUG = false;
     let mode = "area";
     if mode == "area" {
         images.sort_by(|a, b| {
