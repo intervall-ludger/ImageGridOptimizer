@@ -1,6 +1,16 @@
+**still in progress**
+
+### Open Issues:
+- [ ] Support of tiff and other images that are not implemented natively in rust.
+- [ ] Possibility to expand the collage to the left and top and not only to the right and bottom.
+
+---
+
 # ImageGridOptimizer
 
 ImageGridOptimizer is a command-line tool designed to optimize the placement of images from a directory into a single collage. It intelligently arranges images by checking for empty spaces and placing images in a way that minimizes the overall size of the collage. Additionally, it provides an option to filter images based on their extensions or parts of their filenames.
+
+![output.jpg](output.jpg)
 
 ## Features
 
