@@ -43,7 +43,7 @@ fn add_white_border(img: &DynamicImage, border_size: u32) -> DynamicImage {
 ///
 /// A vector of loaded images.
 fn load_images(dir: &str, filter: Option<String>) -> Vec<DynamicImage> {
-    const BORDER_SIZE: u32 = 10; // Size of the white border
+    const BORDER_SIZE: u32 = 5; // Size of the white border
 
     fs::read_dir(dir)
         .expect("Failed to read directory")
@@ -71,11 +71,22 @@ fn load_images(dir: &str, filter: Option<String>) -> Vec<DynamicImage> {
 ///
 /// A single image representing the collage.
 fn create_collage(mut images: Vec<DynamicImage>) -> DynamicImage {
-    images.sort_by(|a, b| {
-        let area_a = a.dimensions().0 * a.dimensions().1;
-        let area_b = b.dimensions().0 * b.dimensions().1;
-        area_b.cmp(&area_a)
-    });
+    let mode = "area";
+    if mode == "area" {
+        images.sort_by(|a, b| {
+            let area_a = a.dimensions().0 * a.dimensions().1;
+            let area_b = b.dimensions().0 * b.dimensions().1;
+            area_b.cmp(&area_a)
+        });
+    }
+    else {
+        images.sort_by(|a, b| {
+            let width_a = a.width();
+            let width_b = b.width();
+            width_b.cmp(&width_a)
+        });
+    }
+
 
     let first_image = images.remove(0);
     let mut collage = first_image;
@@ -106,14 +117,35 @@ fn place_image(mut collage: DynamicImage, new_image: DynamicImage) -> DynamicIma
     let (new_width, new_height) = new_image.dimensions();
     let mut min_width = width;
     let mut min_height = height;
-    let mut min_scope = 2 * new_width + 2 * new_height;
+    let mut min_scope = new_width * new_height;
     let mut found = false;
+    let mut boundary = false;
 
     for y in 0..height {
         for x in 0..width {
+            boundary = false;
             let pixel = collage.get_pixel(x, y);
             if pixel[0] != 0 || pixel[1] != 0 || pixel[2] != 0 {
                 continue;
+            }
+            // Check the neighbors
+            let neighbors = [
+                (x.saturating_sub(1), y), // Left
+                (x + 1, y),               // Right
+                (x, y.saturating_sub(1)), // Above
+                (x, y + 1),               // Below
+            ];
+
+            for &(nx, ny) in &neighbors {
+                if nx < width && ny < height {
+                    let neighbor_pixel = collage.get_pixel(nx, ny);
+                    if neighbor_pixel[0] == 255 && neighbor_pixel[1] == 255 && neighbor_pixel[2] == 255 {
+                        boundary = true;
+                    }
+                }
+            }
+            if !boundary{
+                continue
             }
             if is_empty_space(&collage, x, y, new_width, new_height) {
                 if x + new_width <= width && y + new_height <= height {
@@ -128,7 +160,7 @@ fn place_image(mut collage: DynamicImage, new_image: DynamicImage) -> DynamicIma
                 if tmp_height < height{
                     tmp_height = height;
                 }
-                let scope_delta = (2 * tmp_height + 2 * tmp_width) - (2 * width + 2 * height);
+                let scope_delta = (tmp_height * tmp_width) - (width * height);
                 if scope_delta < min_scope{
                     min_width = tmp_width;
                     min_height = tmp_height;
