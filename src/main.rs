@@ -8,4 +8,3 @@ fn main() {
     let output_image = image_processor::process_images(&dir, filter, standard_width);
     output_image.save("output.jpg").unwrap();
 }
-

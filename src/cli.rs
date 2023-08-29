@@ -1,6 +1,6 @@
 //! Handles command-line interface parsing for ImageGridOptimizer.
 
-use clap::{Arg, App};
+use clap::{App, Arg};
 
 /// Parses command line arguments and returns directory and filter.
 ///
@@ -32,8 +32,9 @@ pub fn parse_args() -> (String, Option<String>, Option<u32>) {
 
     let dir = matches.value_of("DIRECTORY").unwrap().to_string();
     let filter = matches.value_of("filter").map(|s| s.to_string());
-    let standard_width = matches.value_of("standard_width").map(|w| w.parse::<u32>().expect("Invalid width value"));
-
+    let standard_width = matches
+        .value_of("standard_width")
+        .map(|w| w.parse::<u32>().expect("Invalid width value"));
 
     (dir, filter, standard_width)
 }

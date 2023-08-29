@@ -1,9 +1,9 @@
-use std::fs;
-use image::{DynamicImage, GenericImage, GenericImageView, ImageBuffer, Rgba};
 use image::imageops;
-use image::{imageops::resize};
+use image::imageops::resize;
 use image::imageops::FilterType;
+use image::{DynamicImage, GenericImage, GenericImageView, ImageBuffer, Rgba};
 use indicatif::{ProgressBar, ProgressStyle};
+use std::fs;
 
 /// Adds a white border around the given image.
 ///
@@ -46,7 +46,11 @@ fn add_white_border(img: &ImageBuffer<Rgba<u8>, Vec<u8>>, border_size: u32) -> D
 /// # Returns
 ///
 /// A vector of loaded images.
-fn load_images(dir: &str, filter: Option<String>, standard_width: Option<u32>) -> Vec<DynamicImage> {
+fn load_images(
+    dir: &str,
+    filter: Option<String>,
+    standard_width: Option<u32>,
+) -> Vec<DynamicImage> {
     const BORDER_SIZE: u32 = 5; // Size of the white border
 
     fs::read_dir(dir)
@@ -54,8 +58,13 @@ fn load_images(dir: &str, filter: Option<String>, standard_width: Option<u32>) -
         .filter_map(|entry| {
             let entry = entry.expect("Failed to read entry");
             let path = entry.path();
-            if path.is_file() && (filter.is_none()
-                || path.extension().and_then(|s| s.to_str()).map_or(false, |ext| ext == filter.as_ref().unwrap())) {
+            if path.is_file()
+                && (filter.is_none()
+                    || path
+                        .extension()
+                        .and_then(|s| s.to_str())
+                        .map_or(false, |ext| ext == filter.as_ref().unwrap()))
+            {
                 let img = image::open(&path).expect("Failed to open image");
                 let scaled_img = scale_to_standard_width(&img, standard_width);
                 Some(add_white_border(&scaled_img, BORDER_SIZE))
@@ -84,8 +93,7 @@ fn create_collage(mut images: Vec<DynamicImage>) -> DynamicImage {
             let area_b = b.dimensions().0 * b.dimensions().1;
             area_b.cmp(&area_a)
         });
-    }
-    else {
+    } else {
         images.sort_by(|a, b| {
             let width_a = a.width();
             let width_b = b.width();
@@ -93,15 +101,17 @@ fn create_collage(mut images: Vec<DynamicImage>) -> DynamicImage {
         });
     }
 
-
     let first_image = images.remove(0);
     let mut collage = first_image;
 
     let step_size = 100 / images.len();
     let pb = ProgressBar::new(100);
-    pb.set_style(ProgressStyle::default_bar()
-        .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}% ({eta})").expect("REASON")
-        .progress_chars("#>-"));
+    pb.set_style(
+        ProgressStyle::default_bar()
+            .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}% ({eta})")
+            .expect("REASON")
+            .progress_chars("#>-"),
+    );
 
     let mut count = 1;
     for img in &images {
@@ -156,29 +166,32 @@ fn place_image(mut collage: DynamicImage, new_image: &DynamicImage) -> DynamicIm
             for &(nx, ny) in &neighbors {
                 if nx < width && ny < height {
                     let neighbor_pixel = collage.get_pixel(nx, ny);
-                    if neighbor_pixel[0] == 255 && neighbor_pixel[1] == 255 && neighbor_pixel[2] == 255 {
+                    if neighbor_pixel[0] == 255
+                        && neighbor_pixel[1] == 255
+                        && neighbor_pixel[2] == 255
+                    {
                         boundary = true;
                     }
                 }
             }
-            if !boundary{
-                continue
+            if !boundary {
+                continue;
             }
             if is_empty_space(&collage, x, y, new_width, new_height) {
                 if x + new_width <= width && y + new_height <= height {
                     collage.copy_from(new_image, x, y).unwrap();
-                    return collage
+                    return collage;
                 }
                 let mut tmp_width = x + new_width + 1;
                 let mut tmp_height = y + new_height + 1;
-                if tmp_width < width{
+                if tmp_width < width {
                     tmp_width = width;
                 }
-                if tmp_height < height{
+                if tmp_height < height {
                     tmp_height = height;
                 }
                 let scope_delta = (tmp_height * tmp_width) - (width * height);
-                if scope_delta < min_scope{
+                if scope_delta < min_scope {
                     min_width = tmp_width;
                     min_height = tmp_height;
                     found = true;
@@ -195,12 +208,11 @@ fn place_image(mut collage: DynamicImage, new_image: &DynamicImage) -> DynamicIm
         if width > height {
             let mut new_collage = DynamicImage::new_rgb8(width, height + new_height);
             new_collage.copy_from(&collage, 0, 0).unwrap();
-            return place_image(new_collage, new_image)
-        }
-        else {
+            return place_image(new_collage, new_image);
+        } else {
             let mut new_collage = DynamicImage::new_rgb8(width + new_width, height);
             new_collage.copy_from(&collage, 0, 0).unwrap();
-            return place_image(new_collage, new_image)
+            return place_image(new_collage, new_image);
         }
     }
 }
@@ -224,7 +236,7 @@ fn is_empty_space(collage: &DynamicImage, x: u32, y: u32, mut width: u32, mut he
     if x + width > collage_width {
         width = collage_width - x;
     }
-    if y + height > collage_height{
+    if y + height > collage_height {
         height = collage_height - y;
     }
 
@@ -239,7 +251,6 @@ fn is_empty_space(collage: &DynamicImage, x: u32, y: u32, mut width: u32, mut he
     true
 }
 
-
 /// Scales an image to a standard width while maintaining its aspect ratio.
 /// If no standard width is provided, the image remains unchanged.
 ///
@@ -251,7 +262,10 @@ fn is_empty_space(collage: &DynamicImage, x: u32, y: u32, mut width: u32, mut he
 /// # Returns
 ///
 /// A new image scaled to the standard width or the original image if no standard width is provided.
-fn scale_to_standard_width(img: &DynamicImage, standard_width: Option<u32>) -> ImageBuffer<Rgba<u8>, Vec<u8>> {
+fn scale_to_standard_width(
+    img: &DynamicImage,
+    standard_width: Option<u32>,
+) -> ImageBuffer<Rgba<u8>, Vec<u8>> {
     if let Some(width) = standard_width {
         let (current_width, current_height) = img.dimensions();
 
@@ -265,7 +279,6 @@ fn scale_to_standard_width(img: &DynamicImage, standard_width: Option<u32>) -> I
     }
 }
 
-
 /// Processes images from a directory and creates a collage.
 ///
 /// # Parameters
@@ -276,8 +289,11 @@ fn scale_to_standard_width(img: &DynamicImage, standard_width: Option<u32>) -> I
 /// # Returns
 ///
 /// A single image representing the collage.
-pub fn process_images(dir: &str, filter: Option<String>, standard_width: Option<u32>) -> DynamicImage {
+pub fn process_images(
+    dir: &str,
+    filter: Option<String>,
+    standard_width: Option<u32>,
+) -> DynamicImage {
     let images_vec = load_images(dir, filter, standard_width);
     create_collage(images_vec)
 }
-
