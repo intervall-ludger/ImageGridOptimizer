@@ -94,7 +94,7 @@ fn load_images(
 ///
 /// A single image representing the collage.
 fn create_collage(mut images: Vec<DynamicImage>) -> DynamicImage {
-    let DEBUG = false;
+    let DEBUG = true;
     let mode = "area";
     if mode == "area" {
         images.sort_by(|a, b| {
@@ -189,6 +189,7 @@ fn place_image(mut collage: DynamicImage, new_image: &DynamicImage) -> DynamicIm
             if is_empty_space(&collage, x, y, new_width, new_height) {
                 if x + new_width <= width && y + new_height <= height {
                     collage.copy_from(new_image, x, y).unwrap();
+                    collage = crop_collage(collage);
                     return collage;
                 }
                 let mut tmp_width = x + new_width + 1;
@@ -215,16 +216,73 @@ fn place_image(mut collage: DynamicImage, new_image: &DynamicImage) -> DynamicIm
         place_image(new_collage, new_image)
     } else {
         if width > height {
-            let mut new_collage = DynamicImage::new_rgb8(width, height + new_height);
+            let mut new_collage = DynamicImage::new_rgb8(width, height + new_height - 1);
             new_collage.copy_from(&collage, 0, 0).unwrap();
             return place_image(new_collage, new_image);
         } else {
-            let mut new_collage = DynamicImage::new_rgb8(width + new_width, height);
+            let mut new_collage = DynamicImage::new_rgb8(width + new_width - 1, height);
             new_collage.copy_from(&collage, 0, 0).unwrap();
             return place_image(new_collage, new_image);
         }
     }
 }
+
+/// `crop_collage` Function
+///
+/// This function removes the black border from a given collage. It analyzes the image,
+/// identifies the non-black area, and returns a new `DynamicImage` that has the black border removed.
+///
+/// # Parameters
+///
+/// * `collage`: A reference to the `DynamicImage` from which the black border should be removed.
+///
+/// # Returns
+///
+/// Returns a new `DynamicImage` with the black border removed.
+///
+/// # Example
+///
+/// ```rust
+/// let cropped_collage = crop_collage(&collage);
+/// ```
+fn crop_collage(collage: DynamicImage) -> DynamicImage {
+    let (width, height) = collage.dimensions();
+
+    // Find the bounds of the non-black area
+    let mut min_x = width;
+    let mut min_y = height;
+    let mut max_x = 0;
+    let mut max_y = 0;
+
+    for y in 0..height {
+        for x in 0..width {
+            let pixel = collage.get_pixel(x, y);
+            if pixel[0] != 0 || pixel[1] != 0 || pixel[2] != 0 {
+                if x < min_x {
+                    min_x = x;
+                }
+                if x > max_x {
+                    max_x = x;
+                }
+                if y < min_y {
+                    min_y = y;
+                }
+                if y > max_y {
+                    max_y = y;
+                }
+            }
+        }
+    }
+
+    // Calculate the dimensions of the cropped area
+    let crop_width = (max_x - min_x) + 1;
+    let crop_height = (max_y - min_y) + 1;
+
+    // Crop the collage
+    image::DynamicImage::ImageRgba8(imageops::crop_imm(&collage, min_x, min_y, crop_width, crop_height).to_image())
+
+}
+
 
 /// Checks if a space in the collage is empty.
 ///
