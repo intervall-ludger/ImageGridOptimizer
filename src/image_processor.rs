@@ -60,20 +60,29 @@ fn load_images(
             let path = entry.path();
             if path.is_file()
                 && (filter.is_none()
-                    || path
-                        .extension()
-                        .and_then(|s| s.to_str())
-                        .map_or(false, |ext| ext == filter.as_ref().unwrap()))
+                || path
+                .extension()
+                .and_then(|s| s.to_str())
+                .map_or(false, |ext| ext == filter.as_ref().unwrap()))
             {
-                let img = image::open(&path).expect("Failed to open image");
-                let scaled_img = scale_to_standard_width(&img, standard_width);
-                Some(add_white_border(&scaled_img, BORDER_SIZE))
+                let img_result = image::open(&path);
+                match img_result {
+                    Ok(img) => {
+                        let scaled_img = scale_to_standard_width(&img, standard_width);
+                        Some(add_white_border(&scaled_img, BORDER_SIZE))
+                    },
+                    Err(e) => {
+                        eprintln!("Failed to open {}: {}", path.display(), e);
+                        None
+                    }
+                }
             } else {
                 None
             }
         })
         .collect()
 }
+
 
 /// Creates a collage from a vector of images.
 ///
