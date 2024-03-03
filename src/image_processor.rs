@@ -4,6 +4,9 @@ use image::imageops::FilterType;
 use image::{DynamicImage, GenericImage, GenericImageView, ImageBuffer, Rgba};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::fs;
+use rand::{Rng, thread_rng};
+use rand::seq::SliceRandom;
+use rayon::prelude::*;
 
 /// Adds a white border around the given image.
 ///
@@ -93,15 +96,18 @@ fn load_images(
 /// # Returns
 ///
 /// A single image representing the collage.
-fn create_collage(mut images: Vec<DynamicImage>) -> DynamicImage {
+fn create_collage(mut images: Vec<DynamicImage>) -> (DynamicImage, f64) {
     let DEBUG = false;
-    let mode = "area";
+    let mode = "random";
     if mode == "area" {
         images.sort_by(|a, b| {
             let area_a = a.dimensions().0 * a.dimensions().1;
             let area_b = b.dimensions().0 * b.dimensions().1;
             area_b.cmp(&area_a)
         });
+    } else if mode == "random" {
+        let mut rng = thread_rng();
+        images.shuffle(&mut rng);
     } else {
         images.sort_by(|a, b| {
             let width_a = a.width();
@@ -138,8 +144,7 @@ fn create_collage(mut images: Vec<DynamicImage>) -> DynamicImage {
 
     pb.finish_with_message("All images processed!");
 
-    println!("free space: {}", count_free_spaces(&white_collage));
-    collage
+    (collage, count_free_spaces(&white_collage))
 }
 
 
@@ -155,29 +160,32 @@ fn create_white_dynamic_image(image: &DynamicImage) -> DynamicImage {
     DynamicImage::ImageRgba8(white_image_buffer)
 }
 
-/// Counts the number of free (empty) spaces in the collage.
+/// Calculates the proportion of free (empty) spaces within a collage.
+///
+/// This function scans a given collage image, identifying free spaces based on the color of the pixels. It defines a free space as a pixel with a color value of [0, 0, 0, 255] (solid black). The function then calculates the ratio of these free spaces to the total number of pixels in the collage.
 ///
 /// # Parameters
 ///
-/// - `white_collage`: A reference to the collage as a `DynamicImage` where each image is white (counting free space).
+/// - `white_collage`: A reference to a `DynamicImage` representing the collage. The name `white_collage` might be misleading because the function actually looks for black pixels ([0, 0, 0, 255]) to count as free spaces. Consider renaming this parameter to better reflect its purpose or the content it's expected to hold.
 ///
 /// # Returns
 ///
-/// The number of free spaces in the collage.
-fn count_free_spaces(white_collage: &DynamicImage) -> u32 {
+/// A `f64` representing the proportion of free spaces in the collage. This is calculated as the number of free spaces divided by the total number of pixels in the collage.
+///
+fn count_free_spaces(white_collage: &DynamicImage) -> f64 {
     let (width, height) = white_collage.dimensions();
-    let mut free_spaces = 0;
+    let mut free_spaces = 0.0;
 
     for y in 0..height {
         for x in 0..width {
             let pixel = white_collage.get_pixel(x, y);
             if pixel[0] == 0 && pixel[1] == 0 && pixel[2] == 0 && pixel[3] == 255 {
-                free_spaces += 1;
+                free_spaces += 1.0;
             }
         }
     }
 
-    free_spaces / (height * width)
+    free_spaces / (height * width) as f64
 }
 
 
@@ -415,5 +423,18 @@ pub fn process_images(
     standard_width: Option<u32>,
 ) -> DynamicImage {
     let images_vec = load_images(dir, filter, standard_width);
-    create_collage(images_vec)
+
+    let trials: Vec<usize> = (0..30).collect();
+
+    let (best_collage, _) = trials.into_par_iter().map(|_| {
+        let collage_result = create_collage(images_vec.clone());
+
+        collage_result
+    })
+        .reduce_with(|a, b| {
+            if a.1 < b.1 { a } else { b }
+        }).expect("Failed to find an optimal solution");
+
+    best_collage
 }
+
