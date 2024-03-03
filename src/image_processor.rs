@@ -112,6 +112,8 @@ fn create_collage(mut images: Vec<DynamicImage>) -> DynamicImage {
 
     let first_image = images.remove(0);
     let mut collage = first_image;
+    let mut white_collage = create_white_dynamic_image(&collage);
+
 
     let step_size = 100 / images.len();
     let pb = ProgressBar::new(100);
@@ -124,10 +126,11 @@ fn create_collage(mut images: Vec<DynamicImage>) -> DynamicImage {
 
     let mut count = 1;
     for img in &images {
-        collage = place_image(collage, img);
+        (collage, white_collage) = place_image(collage, white_collage, img);
         pb.inc(step_size.try_into().unwrap());
         if DEBUG {
             collage.save(format!("collage_step_{}.png", count)).unwrap();
+            white_collage.save(format!("white_collage_step_{}.png", count)).unwrap();
             println!("{}", count);
             count += 1;
         }
@@ -135,20 +138,61 @@ fn create_collage(mut images: Vec<DynamicImage>) -> DynamicImage {
 
     pb.finish_with_message("All images processed!");
 
+    println!("free space: {}", count_free_spaces(&white_collage));
     collage
 }
+
+
+fn create_white_dynamic_image(image: &DynamicImage) -> DynamicImage {
+    // Create an ImageBuffer with the same dimensions as the collage, filled with white pixels
+    let white_image_buffer = ImageBuffer::from_pixel(
+        image.width(),
+        image.height(),
+        Rgba([255u8, 255u8, 255u8, 255u8])
+    );
+
+    // Convert the ImageBuffer to a DynamicImage
+    DynamicImage::ImageRgba8(white_image_buffer)
+}
+
+/// Counts the number of free (empty) spaces in the collage.
+///
+/// # Parameters
+///
+/// - `white_collage`: A reference to the collage as a `DynamicImage` where each image is white (counting free space).
+///
+/// # Returns
+///
+/// The number of free spaces in the collage.
+fn count_free_spaces(white_collage: &DynamicImage) -> u32 {
+    let (width, height) = white_collage.dimensions();
+    let mut free_spaces = 0;
+
+    for y in 0..height {
+        for x in 0..width {
+            let pixel = white_collage.get_pixel(x, y);
+            if pixel[0] == 0 && pixel[1] == 0 && pixel[2] == 0 && pixel[3] == 255 {
+                free_spaces += 1;
+            }
+        }
+    }
+
+    free_spaces / (height * width)
+}
+
 
 /// Places a new image onto a collage.
 ///
 /// # Parameters
 ///
 /// - `collage`: The existing collage.
+/// - `white_collage`: A collage where each image is white (counting free space).
 /// - `new_image`: The new image to be placed on the collage.
 ///
 /// # Returns
 ///
 /// A new collage with the new image placed.
-fn place_image(mut collage: DynamicImage, new_image: &DynamicImage) -> DynamicImage {
+fn place_image(mut collage: DynamicImage, mut white_collage: DynamicImage, new_image: &DynamicImage) -> (DynamicImage, DynamicImage) {
     let (width, height) = collage.dimensions();
     let (new_width, new_height) = new_image.dimensions();
     let mut min_width = width;
@@ -156,6 +200,7 @@ fn place_image(mut collage: DynamicImage, new_image: &DynamicImage) -> DynamicIm
     let mut min_scope = new_width * new_height;
     let mut found = false;
     let mut boundary = false;
+    let new_image_white = create_white_dynamic_image(new_image);
 
     for y in 0..height {
         for x in 0..width {
@@ -189,8 +234,8 @@ fn place_image(mut collage: DynamicImage, new_image: &DynamicImage) -> DynamicIm
             if is_empty_space(&collage, x, y, new_width, new_height) {
                 if x + new_width <= width && y + new_height <= height {
                     collage.copy_from(new_image, x, y).unwrap();
-                    collage = crop_collage(collage);
-                    return collage;
+                    white_collage.copy_from(&new_image_white, x, y).unwrap();
+                    return crop_collage(collage, white_collage)
                 }
                 let mut tmp_width = x + new_width + 1;
                 let mut tmp_height = y + new_height + 1;
@@ -212,17 +257,23 @@ fn place_image(mut collage: DynamicImage, new_image: &DynamicImage) -> DynamicIm
     }
     if found {
         let mut new_collage = DynamicImage::new_rgb8(min_width, min_height);
+        let mut new_white_collage = new_collage.clone();
         new_collage.copy_from(&collage, 0, 0).unwrap();
-        place_image(new_collage, new_image)
+        new_white_collage.copy_from(&white_collage, 0, 0).unwrap();
+        place_image(new_collage, new_white_collage, new_image)
     } else {
         if width > height {
             let mut new_collage = DynamicImage::new_rgb8(width, height + new_height - 1);
+            let mut new_white_collage = new_collage.clone();
             new_collage.copy_from(&collage, 0, 0).unwrap();
-            return place_image(new_collage, new_image);
+            new_white_collage.copy_from(&white_collage, 0, 0).unwrap();
+            return place_image(new_collage, new_white_collage, new_image);
         } else {
             let mut new_collage = DynamicImage::new_rgb8(width + new_width - 1, height);
+            let mut new_white_collage = new_collage.clone();
             new_collage.copy_from(&collage, 0, 0).unwrap();
-            return place_image(new_collage, new_image);
+            new_white_collage.copy_from(&white_collage, 0, 0).unwrap();
+            return place_image(new_collage, new_white_collage, new_image);
         }
     }
 }
@@ -235,6 +286,7 @@ fn place_image(mut collage: DynamicImage, new_image: &DynamicImage) -> DynamicIm
 /// # Parameters
 ///
 /// * `collage`: A reference to the `DynamicImage` from which the black border should be removed.
+/// * `white_collage`: A reference to the `DynamicImage` from which the black border should be removed.
 ///
 /// # Returns
 ///
@@ -245,7 +297,7 @@ fn place_image(mut collage: DynamicImage, new_image: &DynamicImage) -> DynamicIm
 /// ```rust
 /// let cropped_collage = crop_collage(&collage);
 /// ```
-fn crop_collage(collage: DynamicImage) -> DynamicImage {
+fn crop_collage(mut collage: DynamicImage, mut white_collage: DynamicImage) -> (DynamicImage, DynamicImage) {
     let (width, height) = collage.dimensions();
 
     // Find the bounds of the non-black area
@@ -279,8 +331,9 @@ fn crop_collage(collage: DynamicImage) -> DynamicImage {
     let crop_height = (max_y - min_y) + 1;
 
     // Crop the collage
-    image::DynamicImage::ImageRgba8(imageops::crop_imm(&collage, min_x, min_y, crop_width, crop_height).to_image())
-
+    collage = image::DynamicImage::ImageRgba8(imageops::crop_imm(&collage, min_x, min_y, crop_width, crop_height).to_image());
+    white_collage = image::DynamicImage::ImageRgba8(imageops::crop_imm(&white_collage, min_x, min_y, crop_width, crop_height).to_image());
+    return (collage, white_collage)
 }
 
 
