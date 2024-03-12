@@ -7,6 +7,7 @@ use std::fs;
 use rand::{Rng, thread_rng};
 use rand::seq::SliceRandom;
 use rayon::prelude::*;
+use std::sync::{Mutex, Arc};
 
 /// Adds a white border around the given image.
 ///
@@ -86,6 +87,31 @@ fn load_images(
         .collect()
 }
 
+/// Scales an image by a specific factor.
+///
+/// # Parameters
+/// - `img`: The image to be scaled. Note that we take ownership here.
+/// - `scale_factor`: The factor by which the image will be scaled.
+///
+/// # Returns
+/// A new `DynamicImage` representing the scaled image.
+fn scale_image(mut img: DynamicImage, scale_factor: f64) -> DynamicImage {
+    let (width, height) = img.dimensions();
+    let new_width = (width as f64 * scale_factor) as u32;
+    let new_height = (height as f64 * scale_factor) as u32;
+
+    img = img.resize_exact(new_width, new_height, image::imageops::FilterType::Lanczos3);
+
+    for y in 0..img.height() {
+        for x in 0..img.width() {
+            if y == 0 || x == 0 || y == img.height()  || x == img.width() {
+                img.put_pixel(x, y, image::Rgba([255u8, 255u8, 255u8, 255u8]));
+            }
+        }
+    }
+    return img
+}
+
 
 /// Creates a collage from a vector of images.
 ///
@@ -96,8 +122,7 @@ fn load_images(
 /// # Returns
 ///
 /// A single image representing the collage.
-fn create_collage(mut images: Vec<DynamicImage>) -> (DynamicImage, f64) {
-    let DEBUG = false;
+fn create_random_collage(mut images: Vec<DynamicImage>, min_number: i32, max_number: i32) -> (Vec<DynamicImage>, f64) {
     let mode = "random";
     if mode == "area" {
         images.sort_by(|a, b| {
@@ -115,9 +140,26 @@ fn create_collage(mut images: Vec<DynamicImage>) -> (DynamicImage, f64) {
             width_b.cmp(&width_a)
         });
     }
+    let mut rng = rand::thread_rng();
+    let number: usize = rng.gen_range(min_number..=max_number) as usize;
+    images = images[0..number].to_vec();
+    let (collage, free_space) = create_collage(images.clone(), 0.1);
+    return (images, free_space)
+}
 
+/// Creates a collage from a vector of images.
+///
+/// # Parameters
+///
+/// - `images`: A vector of images to be used in the collage.
+///
+/// # Returns
+///
+/// A single image representing the collage.
+fn create_collage(mut images: Vec<DynamicImage>, scaling: f64) -> (DynamicImage, f64) {
+    let DEBUG = false;
     let first_image = images.remove(0);
-    let mut collage = first_image;
+    let mut collage = scale_image(first_image.clone(), scaling);
     let mut white_collage = create_white_dynamic_image(&collage);
 
 
@@ -132,7 +174,7 @@ fn create_collage(mut images: Vec<DynamicImage>) -> (DynamicImage, f64) {
 
     let mut count = 1;
     for img in &images {
-        (collage, white_collage) = place_image(collage, white_collage, img);
+        (collage, white_collage) = place_image(collage, white_collage, &scale_image(img.clone(), scaling));
         pb.inc(step_size.try_into().unwrap());
         if DEBUG {
             collage.save(format!("collage_step_{}.png", count)).unwrap();
@@ -144,9 +186,9 @@ fn create_collage(mut images: Vec<DynamicImage>) -> (DynamicImage, f64) {
 
     pb.finish_with_message("All images processed!");
 
+    collage = fill_background(collage, white_collage.clone());
     (collage, count_free_spaces(&white_collage))
 }
-
 
 fn create_white_dynamic_image(image: &DynamicImage) -> DynamicImage {
     // Create an ImageBuffer with the same dimensions as the collage, filled with white pixels
@@ -188,6 +230,18 @@ fn count_free_spaces(white_collage: &DynamicImage) -> f64 {
     free_spaces / (height * width) as f64
 }
 
+fn fill_background(mut collage: DynamicImage, white_collage: DynamicImage) -> DynamicImage {
+    for y in 0..collage.height() {
+        for x in 0..collage.width() {
+            let pixel = white_collage.get_pixel(x, y);
+            if pixel[0] == 0 && pixel[1] == 0 && pixel[2] == 0 && pixel[3] == 255 {
+                collage.put_pixel(x, y, image::Rgba([255u8, 255u8, 255u8, 255u8]));
+            }
+        }
+    }
+    collage
+}
+
 
 /// Places a new image onto a collage.
 ///
@@ -213,7 +267,7 @@ fn place_image(mut collage: DynamicImage, mut white_collage: DynamicImage, new_i
     for y in 0..height {
         for x in 0..width {
             boundary = false;
-            let pixel = collage.get_pixel(x, y);
+            let pixel = white_collage.get_pixel(x, y);
             if pixel[0] != 0 || pixel[1] != 0 || pixel[2] != 0 {
                 continue;
             }
@@ -227,7 +281,7 @@ fn place_image(mut collage: DynamicImage, mut white_collage: DynamicImage, new_i
 
             for &(nx, ny) in &neighbors {
                 if nx < width && ny < height {
-                    let neighbor_pixel = collage.get_pixel(nx, ny);
+                    let neighbor_pixel = white_collage.get_pixel(nx, ny);
                     if neighbor_pixel[0] == 255
                         && neighbor_pixel[1] == 255
                         && neighbor_pixel[2] == 255
@@ -424,17 +478,42 @@ pub fn process_images(
 ) -> DynamicImage {
     let images_vec = load_images(dir, filter, standard_width);
 
-    let trials: Vec<usize> = (0..30).collect();
 
-    let (best_collage, _) = trials.into_par_iter().map(|_| {
-        let collage_result = create_collage(images_vec.clone());
-
+    let trials: Vec<usize> = (0..3000).collect();
+    let mut all_results: Vec<_> = trials.into_par_iter().map(|_| {
+        let collage_result = create_random_collage(images_vec.clone(), 20, 70);
         collage_result
     })
-        .reduce_with(|a, b| {
-            if a.1 < b.1 { a } else { b }
-        }).expect("Failed to find an optimal solution");
+        .collect();
 
-    best_collage
+    all_results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+    let best_collage_images = all_results.into_iter().take(30).collect::<Vec<_>>();
+
+    let min_free_space = Arc::new(Mutex::new(f64::MAX));
+    let best_of_best = Arc::new(Mutex::new(None));
+
+    best_collage_images.par_iter().for_each(|best_collage_image| {
+        println!("{}", best_collage_image.1);
+        let (collage, free_space) = create_collage(best_collage_image.0.clone(), 1.0);
+
+        let mut min_free_space_guard = min_free_space.lock().unwrap();
+        let mut best_of_best_guard = best_of_best.lock().unwrap();
+
+        if free_space < *min_free_space_guard {
+            *min_free_space_guard = free_space;
+            *best_of_best_guard = Some(collage);
+        }
+    });
+
+    println!("{:?}", *min_free_space);
+    // Da final_best_collage eine Option ist, müssen Sie prüfen, ob ein Wert vorhanden ist
+    let final_best_collage = best_of_best.lock().unwrap();
+    match &*final_best_collage {
+        Some(collage) => collage.clone(),
+        None => {
+            // Hier müssen Sie entscheiden, wie Sie vorgehen möchten, wenn kein bestes Bild gefunden wurde
+            // Beispiel: Erzeugen eines neuen DynamicImage oder Zurückgeben eines Standardbildes
+            DynamicImage::new_rgb8(1, 1) // oder eine geeignete Fehlerbehandlung
+        },
+    }
 }
-
