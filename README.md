@@ -8,17 +8,23 @@
 
 # ImageGridOptimizer
 
-ImageGridOptimizer is a command-line tool designed to optimize the placement of images from a directory into a single collage. It intelligently arranges images by checking for empty spaces and placing images in a way that minimizes the overall size of the collage. Additionally, it provides an option to filter images based on their extensions or parts of their filenames.
+ImageGridOptimizer is a command-line utility that streamlines the process of compiling multiple images from a specified directory into a cohesive collage. This tool not only arranges images to minimize the collage's overall dimensions but also offers functionality to filter images by extension or filename criteria. Each image in the collage is framed with a white border, enhancing visual separation and overall aesthetic appeal.
 
-![output.jpg](output.jpg)
+![Collage Example](output.jpg)
 
-## Features
+## Key Features
 
-- **Optimized Placement**: Efficiently places images in a collage to minimize the overall size.
-- **Filtering**: Allows filtering of images based on extensions or parts of filenames.
-- **White Border Addition**: Adds a white border around each image for better distinction in the collage.
+- **Dynamic Image Placement**: Implements an algorithm to place images efficiently within a collage, aiming to reduce the final image's dimensions.
+- **Flexible Image Filtering**: Supports filtering of images based on their extensions or specific filename components, allowing for greater control over the images included in the collage.
+- **White Border Enhancement**: Automatically adds a white border around each image, ensuring distinct separation and a visually pleasing result.
 
-## Installation
+## Getting Started
+
+### Prerequisites
+
+Ensure you have both Rust and Cargo installed on your system. These tools are essential for building and running the ImageGridOptimizer.
+
+### Installation
 
 1. Ensure you have Rust and Cargo installed on your machine.
 2. Clone this repository:
@@ -31,25 +37,29 @@ ImageGridOptimizer is a command-line tool designed to optimize the placement of 
    cargo build --release
    ```
 
-## Usage
+### How to Use
 
-Navigate to the project's target/release directory and run:
+To use ImageGridOptimizer, navigate to the `target/release` directory within the project folder. Execute the program by running:
 
 ```bash
-./ImageGridOptimizer [DIRECTORY] -f [FILTER]
+./ImageGridOptimizer [DIRECTORY] -f [FILTER] -w [WIDTH] -n [NUM_TRIALS] --min-images [MIN_IMAGES] --max-images [MAX_IMAGES]
 ```
 
-- `DIRECTORY`: The directory containing the images you want to optimize.
-- `FILTER` (optional): Filter images by extension (e.g., `.jpg`, `.png`) or part of the filename (e.g., `*img_1*`).
+- `DIRECTORY`: Specifies the directory containing the images for the collage.
+- `FILTER` (Optional): Filters the images by extension (e.g., `.jpg`, `.png`) or a part of the filename (e.g., `*img_1*`).
+- `WIDTH` (Optional): Sets an optional standard width to which all images will be scaled.
+- `NUM_TRIALS` (Optional): Determines the number of trials to generate collages, allowing the algorithm to explore different arrangements.
+- `MIN_IMAGES` (Optional): Sets the minimum number of images per collage.
+- `MAX_IMAGES` (Optional): Defines the maximum number of images per collage.
 
-The optimized collage will be saved as `output.jpg` in the project's root directory.
+The final collage will be saved as `output.jpg` in the project's root directory.
 
-## Example
+### Example
 
-To optimize images in the directory `my_images` with a `.jpg` extension:
+To create a collage from images in the `my_photos` directory, filtering for `.jpg` files, scaling images to a width of 800 pixels, with at least 20 images and no more than 70, performing 1000 trials:
 
 ```bash
-./ImageGridOptimizer my_images -f .jpg
+./ImageGridOptimizer my_photos -f .jpg -w 800 -n 1000 --min 20 --max 70
 ```
 
 ## Contributing
@@ -58,4 +68,4 @@ Contributions are welcome! Please fork the repository and create a pull request 
 
 ## License
 
-This project is licensed under the MIT License. See the `LICENSE` file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
