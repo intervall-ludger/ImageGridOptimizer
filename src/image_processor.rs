@@ -122,7 +122,7 @@ fn scale_image(mut img: DynamicImage, scale_factor: f64) -> DynamicImage {
 /// # Returns
 ///
 /// A single image representing the collage.
-fn create_random_collage(mut images: Vec<DynamicImage>, min_number: i32, max_number: i32) -> (Vec<DynamicImage>, f64) {
+fn create_random_collage(mut images: Vec<DynamicImage>, min_number: usize, max_number: usize) -> (Vec<DynamicImage>, f64) {
     let mode = "random";
     if mode == "area" {
         images.sort_by(|a, b| {
@@ -461,59 +461,74 @@ fn scale_to_standard_width(
     }
 }
 
-/// Processes images from a directory and creates a collage.
+/// Processes images from a directory and creates a collage, with customizable parameters for experimentation.
 ///
 /// # Parameters
 ///
 /// - `dir`: The directory containing the images.
 /// - `filter`: An optional filter for image extensions or filenames.
+/// - `standard_width`: An optional standard width to scale the images to.
+/// - `num_trials`: The number of random collages to generate for finding the best one.
+/// - `min_images`: The minimum number of images per collage.
+/// - `max_images`: The maximum number of images per collage.
 ///
 /// # Returns
 ///
-/// A single image representing the collage.
+/// A single image representing the best collage found.
 pub fn process_images(
     dir: &str,
     filter: Option<String>,
     standard_width: Option<u32>,
+    num_trials: usize,
+    min_images: usize,
+    max_images: usize,
 ) -> DynamicImage {
+    // Load images based on directory, filter, and standard width.
     let images_vec = load_images(dir, filter, standard_width);
 
-
-    let trials: Vec<usize> = (0..3000).collect();
+    // Generate trials to create random collages based on user-specified numbers.
+    let trials: Vec<usize> = (0..num_trials).collect();
     let mut all_results: Vec<_> = trials.into_par_iter().map(|_| {
-        let collage_result = create_random_collage(images_vec.clone(), 20, 70);
+        let collage_result = create_random_collage(images_vec.clone(), min_images, max_images);
         collage_result
     })
         .collect();
 
+    // Sort the collages based on some criteria, e.g., minimum free space, and take the top N collages.
     all_results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
-    let best_collage_images = all_results.into_iter().take(30).collect::<Vec<_>>();
+    let mut top_collages = all_results.len();
+    if top_collages > 30 {
+        top_collages = 30;
+    }
+    let best_collage_images = all_results.into_iter().take(top_collages).collect::<Vec<_>>();
 
+    // Parallel processing of the best collages to find the very best one.
     let min_free_space = Arc::new(Mutex::new(f64::MAX));
     let best_of_best = Arc::new(Mutex::new(None));
 
     best_collage_images.par_iter().for_each(|best_collage_image| {
-        println!("{}", best_collage_image.1);
+        println!("{}", best_collage_image.1); // Print free space for debugging.
         let (collage, free_space) = create_collage(best_collage_image.0.clone(), 1.0);
 
         let mut min_free_space_guard = min_free_space.lock().unwrap();
         let mut best_of_best_guard = best_of_best.lock().unwrap();
 
+        // Update the best collage if the current one has less free space.
         if free_space < *min_free_space_guard {
             *min_free_space_guard = free_space;
             *best_of_best_guard = Some(collage);
         }
     });
 
+    // Debugging: Print the minimum free space found.
     println!("{:?}", *min_free_space);
-    // Da final_best_collage eine Option ist, müssen Sie prüfen, ob ein Wert vorhanden ist
+    // Handle the case where no best collage is found.
     let final_best_collage = best_of_best.lock().unwrap();
     match &*final_best_collage {
         Some(collage) => collage.clone(),
         None => {
-            // Hier müssen Sie entscheiden, wie Sie vorgehen möchten, wenn kein bestes Bild gefunden wurde
-            // Beispiel: Erzeugen eines neuen DynamicImage oder Zurückgeben eines Standardbildes
-            DynamicImage::new_rgb8(1, 1) // oder eine geeignete Fehlerbehandlung
+            // Return a default image or handle the error as required.
+            DynamicImage::new_rgb8(1, 1) // Placeholder for error handling.
         },
     }
 }
