@@ -26,12 +26,14 @@ jobs:
 
       - name: Set artifact path
         id: set_artifact_path
+        shell: bash
         run: |
-          if [ "${{ runner.os }}" = "Windows" ]; then
+          if [ "Windows" = "Windows" ]; then
             echo "::set-output name=path::target/release/ImageGridOptimizer.exe"
           else
             echo "::set-output name=path::target/release/ImageGridOptimizer"
           fi
+
 
       - name: Archive production artifacts
         uses: actions/upload-artifact@v2
