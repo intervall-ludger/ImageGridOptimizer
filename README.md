@@ -66,6 +66,16 @@ To create a collage from images in the `my_photos` directory, filtering for `.jp
 
 Contributions are welcome! Please fork the repository and create a pull request with your changes.
 
+
+## Release
+
+```shell
+git tag v1.0
+git push origin v1.0
+```
+
+
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
