@@ -59,7 +59,7 @@ pub fn parse_args() -> (String, Option<String>, Option<u32>, usize, usize, usize
         .map(|w| w.parse::<u32>().expect("Invalid width value"));
     let num_trials = matches
         .value_of("num_trials")
-        .unwrap_or("3000")
+        .unwrap_or("1000")
         .parse::<usize>()
         .expect("Invalid number of trials");
     let min_images = matches
@@ -69,7 +69,7 @@ pub fn parse_args() -> (String, Option<String>, Option<u32>, usize, usize, usize
         .expect("Invalid minimum number of images");
     let max_images = matches
         .value_of("max_images")
-        .unwrap_or("70")
+        .unwrap_or("50")
         .parse::<usize>()
         .expect("Invalid maximum number of images");
 

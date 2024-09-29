@@ -8,6 +8,7 @@ use rand::{Rng, thread_rng};
 use rand::seq::SliceRandom;
 use rayon::prelude::*;
 use std::sync::{Mutex, Arc};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Adds a white border around the given image.
 ///
@@ -259,7 +260,7 @@ fn place_image(mut collage: DynamicImage, mut white_collage: DynamicImage, new_i
     let (new_width, new_height) = new_image.dimensions();
     let mut min_width = width;
     let mut min_height = height;
-    let mut min_scope = new_width * new_height;
+    let aim_rotation = 16.0 / 9.0;
     let mut found = false;
     let mut boundary = false;
     let new_image_white = create_white_dynamic_image(new_image);
@@ -307,12 +308,11 @@ fn place_image(mut collage: DynamicImage, mut white_collage: DynamicImage, new_i
                 if tmp_height < height {
                     tmp_height = height;
                 }
-                let scope_delta = (tmp_height * tmp_width) - (width * height);
-                if scope_delta < min_scope {
+                let current_rotation = tmp_width as f32 / tmp_height as f32;
+                if (current_rotation - aim_rotation).abs() < (min_width as f32 / min_height as f32 - aim_rotation).abs() {
                     min_width = tmp_width;
                     min_height = tmp_height;
                     found = true;
-                    min_scope = scope_delta;
                 }
             }
         }
@@ -475,6 +475,7 @@ fn scale_to_standard_width(
 /// # Returns
 ///
 /// A single image representing the best collage found.
+/// Process images to find the best collage based on minimal free space criteria.
 pub fn process_images(
     dir: &str,
     filter: Option<String>,
@@ -486,21 +487,33 @@ pub fn process_images(
     // Load images based on directory, filter, and standard width.
     let images_vec = load_images(dir, filter, standard_width);
 
+    let mut min_space = 1.0;
+    let mut count = 1;
+    let mut best_collage_images = Vec::new();
     // Generate trials to create random collages based on user-specified numbers.
-    let trials: Vec<usize> = (0..num_trials).collect();
-    let mut all_results: Vec<_> = trials.into_par_iter().map(|_| {
-        let collage_result = create_random_collage(images_vec.clone(), min_images, max_images);
-        collage_result
-    })
-        .collect();
+    while min_space > 0.01 {
+        let trials: Vec<usize> = (0..num_trials).collect();
+        let mut all_results: Vec<_> = trials.into_par_iter().map(|_| {
+            let collage_result = create_random_collage(images_vec.clone(), min_images, max_images);
+            collage_result
+        })
+            .collect();
 
-    // Sort the collages based on some criteria, e.g., minimum free space, and take the top N collages.
-    all_results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
-    let mut top_collages = all_results.len();
-    if top_collages > 30 {
-        top_collages = 30;
+        // Sort the collages based on minimum free space and take the top N collages.
+        all_results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        let top_collages = all_results.iter().take(30).cloned().collect::<Vec<_>>();
+
+        // Update the collection of best collage images
+        best_collage_images = top_collages;
+
+        // Update min_space to the smallest free space in the top collages
+        min_space = best_collage_images
+            .first()
+            .map(|(_collage, space)| *space)
+            .unwrap_or(f64::MAX);
+        println!("Min Space: {} - count {}", min_space, count);
+        count += 1;
     }
-    let best_collage_images = all_results.into_iter().take(top_collages).collect::<Vec<_>>();
 
     // Parallel processing of the best collages to find the very best one.
     let min_free_space = Arc::new(Mutex::new(f64::MAX));
