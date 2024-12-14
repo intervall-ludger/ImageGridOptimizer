@@ -1,6 +1,7 @@
 //! Contains the main logic for loading, processing, and combining images into an optimized collage.
 //!
 //! This version distributes padding evenly between images without adding padding around the collage edges.
+//! The calculation of free space has been corrected and is now represented as a percentage.
 
 use image::imageops::resize;
 use image::imageops::FilterType;
@@ -159,7 +160,7 @@ pub fn process_images(
 
     // Track the best layout
     let mut best_layout: Option<(Vec<(u32, Rect)>, u32, u32)> = None;
-    let mut minimal_free_area = u64::MAX;
+    let mut minimal_free_area_percentage = f64::MAX;
     let mut best_aspect_ratio_diff = f64::MAX;
 
     println!("Starting {} trials to find the optimal collage layout...", num_trials);
@@ -185,7 +186,7 @@ pub fn process_images(
 
         // Estimate canvas size based on desired aspect ratio
         let estimated_height = ((total_images_area as f64 / DESIRED_ASPECT_RATIO).sqrt()) as u32;
-        let estimated_width = (DESIRED_ASPECT_RATIO * (total_images_area as f64 / DESIRED_ASPECT_RATIO).sqrt()) as u32;
+        let estimated_width = (DESIRED_ASPECT_RATIO * estimated_height as f64) as u32;
 
         // Pack the images
         let (packed_locations, packed_width, packed_height) = pack_images(&selected_images, estimated_width, estimated_height);
@@ -193,8 +194,17 @@ pub fn process_images(
         // Calculate collage area
         let collage_area = packed_width as u64 * packed_height as u64;
 
+        // Calculate total area of packed rectangles (including padding)
+        let total_packed_area: u64 = packed_locations
+            .iter()
+            .map(|(_, rect)| rect.width as u64 * rect.height as u64)
+            .sum();
+
         // Calculate free space
-        let free_area = collage_area - total_images_area;
+        let free_area = collage_area - total_packed_area;
+
+        // Calculate free space percentage
+        let free_area_percentage = (free_area as f64 / collage_area as f64) * 100.0;
 
         // Calculate aspect ratio difference from desired
         let aspect_ratio = if packed_height == 0 {
@@ -205,18 +215,18 @@ pub fn process_images(
         let aspect_ratio_diff = (aspect_ratio - DESIRED_ASPECT_RATIO).abs();
 
         // Determine if this layout is better
-        // Prioritize minimal free area, then aspect ratio closeness
-        if free_area < minimal_free_area
-            || (free_area == minimal_free_area && aspect_ratio_diff < best_aspect_ratio_diff)
+        // Prioritize minimal free area percentage, then aspect ratio closeness
+        if free_area_percentage < minimal_free_area_percentage
+            || (free_area_percentage == minimal_free_area_percentage && aspect_ratio_diff < best_aspect_ratio_diff)
         {
-            minimal_free_area = free_area;
+            minimal_free_area_percentage = free_area_percentage;
             best_aspect_ratio_diff = aspect_ratio_diff;
             best_layout = Some((packed_locations.clone(), packed_width, packed_height));
 
             // Optional: Print progress on finding a new best layout
             println!(
-                "Trial {}: New best layout found with free area {} and aspect ratio difference {:.4}",
-                trial, free_area, aspect_ratio_diff
+                "Trial {}: New best layout found with free area {:.2}% and aspect ratio difference {:.4}",
+                trial, free_area_percentage, aspect_ratio_diff
             );
         }
 
@@ -231,8 +241,8 @@ pub fn process_images(
     // Use the best layout found
     if let Some((packed_locations, max_width, max_height)) = best_layout {
         println!(
-            "Best layout has free area: {} with collage dimensions: {}x{}",
-            minimal_free_area, max_width, max_height
+            "Best layout has free area: {:.2}% with collage dimensions: {}x{}",
+            minimal_free_area_percentage, max_width, max_height
         );
         create_collage(images_vec, packed_locations, max_width, max_height)
     } else {
@@ -354,4 +364,3 @@ fn create_collage(
 
     collage
 }
-
