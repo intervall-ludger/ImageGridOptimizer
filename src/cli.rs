@@ -1,26 +1,13 @@
-//! Handles parsing of command-line arguments for the ImageGridOptimizer.
-
 use clap::{App, Arg};
 
-/// Parses command-line arguments and returns parameters for image processing.
-///
-/// # Returns
-///
-/// A tuple containing:
-/// - Directory as `String`
-/// - `Option<String>` for the filter
-/// - `Option<u32>` for the standard width
-/// - `usize` for the number of trials
-/// - `usize` for the minimum number of images per collage
-/// - `usize` for the maximum number of images per collage
-pub fn parse_args() -> (String, Option<String>, Option<u32>, usize, usize, usize) {
-    let matches = App::new("Image Optimizer")
+pub fn parse_args() -> (String, Option<String>, Option<u32>, usize, usize, usize, usize, f64, f64) {
+    let matches = App::new("ImageGridOptimizer GA")
         .version("1.0")
-        .author("Ludger Radke")
-        .about("Optimizes image arrangement from a directory by creating a collage.")
+        .author("Senior Developer")
+        .about("Optimizes the arrangement of images using a Genetic Algorithm.")
         .arg(
             Arg::with_name("DIRECTORY")
-                .help("The directory containing the images.")
+                .help("Directory containing the images.")
                 .required(true)
                 .index(1),
         )
@@ -29,7 +16,7 @@ pub fn parse_args() -> (String, Option<String>, Option<u32>, usize, usize, usize
                 .short("f")
                 .long("filter")
                 .value_name("FILTER")
-                .help("Filter images by extension (e.g., .jpg, .png) or part of the filename (e.g., *img_1*).")
+                .help("Filter for images (extension or part of filename).")
                 .takes_value(true),
         )
         .arg(
@@ -37,15 +24,21 @@ pub fn parse_args() -> (String, Option<String>, Option<u32>, usize, usize, usize
                 .short("w")
                 .long("width")
                 .value_name("WIDTH")
-                .help("Optional standard width to which images should be scaled.")
+                .help("Optional standard width for scaling images.")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("num_trials")
-                .short("n")
-                .long("num-trials")
-                .value_name("NUM_TRIALS")
-                .help("Number of trials to generate collages.")
+            Arg::with_name("population_size")
+                .long("pop-size")
+                .value_name("POP_SIZE")
+                .help("Population size for the genetic algorithm.")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("generations")
+                .long("gens")
+                .value_name("GENS")
+                .help("Number of generations for the genetic algorithm.")
                 .takes_value(true),
         )
         .arg(
@@ -62,28 +55,35 @@ pub fn parse_args() -> (String, Option<String>, Option<u32>, usize, usize, usize
                 .help("Maximum number of images per collage.")
                 .takes_value(true),
         )
+        .arg(
+            Arg::with_name("mutation_rate")
+                .long("mutation-rate")
+                .value_name("MUTATION_RATE")
+                .help("Mutation rate for the genetic algorithm.")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("crossover_rate")
+                .long("crossover-rate")
+                .value_name("CROSSOVER_RATE")
+                .help("Crossover rate for the genetic algorithm.")
+                .takes_value(true),
+        )
         .get_matches();
 
     let dir = matches.value_of("DIRECTORY").unwrap().to_string();
     let filter = matches.value_of("filter").map(|s| s.to_string());
     let standard_width = matches
         .value_of("standard_width")
-        .map(|w| w.parse::<u32>().expect("Invalid value for width"));
-    let num_trials = matches
-        .value_of("num_trials")
-        .unwrap_or("100000") // Default to 10,000 trials
-        .parse::<usize>()
-        .expect("Invalid number of trials");
-    let min_images = matches
-        .value_of("min_images")
-        .unwrap_or("60")
-        .parse::<usize>()
-        .expect("Invalid minimum number of images");
-    let max_images = matches
-        .value_of("max_images")
-        .unwrap_or("90")
-        .parse::<usize>()
-        .expect("Invalid maximum number of images");
+        .map(|w| w.parse::<u32>().expect("Invalid width"));
 
-    (dir, filter, standard_width, num_trials, min_images, max_images)
+    // Default large values to handle large number of trials
+    let population_size = matches.value_of("pop_size").unwrap_or("1000").parse::<usize>().expect("Invalid population size");
+    let generations = matches.value_of("gens").unwrap_or("3000").parse::<usize>().expect("Invalid number of generations");
+    let min_images = matches.value_of("min_images").unwrap_or("6").parse::<usize>().expect("Invalid min_images");
+    let max_images = matches.value_of("max_images").unwrap_or("60").parse::<usize>().expect("Invalid max_images");
+    let mutation_rate = matches.value_of("mutation_rate").unwrap_or("0.1").parse::<f64>().expect("Invalid mutation rate");
+    let crossover_rate = matches.value_of("crossover_rate").unwrap_or("0.7").parse::<f64>().expect("Invalid crossover rate");
+
+    (dir, filter, standard_width, population_size, generations, min_images, max_images, mutation_rate, crossover_rate)
 }

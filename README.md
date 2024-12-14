@@ -1,80 +1,122 @@
-**still in progress**
+# ImageGridOptimizer
 
-### Open Issues:
-- [ ] Support of tiff and other images that are not implemented natively in rust.
-- [ ] Possibility to expand the collage to the left and top and not only to the right and bottom.
+ImageGridOptimizer is a command-line utility that uses a Genetic Algorithm (GA) to arrange multiple images from a specified directory into a cohesive collage. It can efficiently handle a large number of trials (e.g., millions) and leverages parallel processing (via Rayon) to speed up computation. Images are arranged to minimize the collage dimensions, filtered according to user criteria, and presented with a white border to enhance visual separation.
+
+**Still in Progress**
+
+### Open Issues
+- [ ] Support additional image formats such as TIFF or other non-natively supported formats.
 
 ---
 
-# ImageGridOptimizer
-
-ImageGridOptimizer is a command-line utility that streamlines the process of compiling multiple images from a specified directory into a cohesive collage. This tool not only arranges images to minimize the collage's overall dimensions but also offers functionality to filter images by extension or filename criteria. Each image in the collage is framed with a white border, enhancing visual separation and overall aesthetic appeal.
-
-![Collage Example](output.jpg)
-
 ## Key Features
 
-- **Dynamic Image Placement**: Implements an algorithm to place images efficiently within a collage, aiming to reduce the final image's dimensions.
-- **Flexible Image Filtering**: Supports filtering of images based on their extensions or specific filename components, allowing for greater control over the images included in the collage.
-- **White Border Enhancement**: Automatically adds a white border around each image, ensuring distinct separation and a visually pleasing result.
+- **Large-Scale Trials & Parallelization**: Configurable to run millions of trials, utilizing multiple CPU cores to accelerate the genetic algorithm.
+- **Genetic Algorithm Optimization**: Employs a GA to find an optimal image layout, considering fitness factors such as aspect ratio and minimal whitespace.
+- **Flexible Image Filtering**: Easily filter images by extension or filename substring.
+- **Automatic Borders & Centering**: Adds a white border around each image and centers the final layout to distribute free space more evenly.
 
 ## Getting Started
 
 ### Prerequisites
 
-Ensure you have both Rust and Cargo installed on your system. These tools are essential for building and running the ImageGridOptimizer.
+- **Rust and Cargo**:  
+  Install from [Rustup](https://rustup.rs/).
+
+- **Rayon**:  
+  Dependency is managed automatically by Cargo.
 
 ### Installation
 
-1. Ensure you have Rust and Cargo installed on your machine.
-2. Clone this repository:
+1. Clone the repository:
    ```bash
    git clone https://github.com/ludgerradke/ImageGridOptimizer.git
    ```
-3. Navigate to the project directory and build the project:
+2. Navigate to the project directory:
    ```bash
    cd ImageGridOptimizer
+   ```
+3. Build the project in release mode:
+   ```bash
    cargo build --release
    ```
 
 ### How to Use
 
-To use ImageGridOptimizer, navigate to the `target/release` directory within the project folder. Execute the program by running:
+Run the program from the `target/release` directory (or specify the full path):
 
 ```bash
-./ImageGridOptimizer [DIRECTORY] -f [FILTER] -w [WIDTH] -n [NUM_TRIALS] --min-images [MIN_IMAGES] --max-images [MAX_IMAGES]
+./ImageGridOptimizer [DIRECTORY] [OPTIONS]
 ```
 
-- `DIRECTORY`: Specifies the directory containing the images for the collage.
-- `FILTER` (Optional): Filters the images by extension (e.g., `.jpg`, `.png`) or a part of the filename (e.g., `*img_1*`).
-- `WIDTH` (Optional): Sets an optional standard width to which all images will be scaled.
-- `NUM_TRIALS` (Optional): Determines the number of trials to generate collages, allowing the algorithm to explore different arrangements.
-- `MIN_IMAGES` (Optional): Sets the minimum number of images per collage.
-- `MAX_IMAGES` (Optional): Defines the maximum number of images per collage.
+**Key Options:**
 
-The final collage will be saved as `output.jpg` in the project's root directory.
+- `-f, --filter <FILTER>`  
+  Filters images (e.g., by extension `.jpg` or substring `img_`).
 
-### Example
+- `-w, --width <WIDTH>`  
+  Scales all images to a specified width, preserving aspect ratio.
 
-To create a collage from images in the `my_photos` directory, filtering for `.jpg` files, scaling images to a width of 800 pixels, with at least 20 images and no more than 70, performing 1000 trials:
+- `--pop-size <POP_SIZE>`  
+  Population size for the GA (default: 1000).
+
+- `--gens <GENS>`  
+  Number of generations (default: 3000).
+
+- `--min-images <MIN_IMAGES>`  
+  Minimum number of images per collage.
+
+- `--max-images <MAX_IMAGES>`  
+  Maximum number of images per collage.
+
+- `--mutation-rate <MUTATION_RATE>`  
+  Mutation rate for the GA.
+
+- `--crossover-rate <CROSSOVER_RATE>`  
+  Crossover rate for the GA.
+
+**Example:**
 
 ```bash
-./ImageGridOptimizer my_photos -f .jpg -w 800 -n 1000 --min 20 --max 70
+./ImageGridOptimizer my_photos -f .jpg -w 800 --pop-size 1000 --gens 3000 --min-images 20 --max-images 70 --mutation-rate 0.1 --crossover-rate 0.7
 ```
+
+This example:
+- Loads `.jpg` images from `my_photos`
+- Scales them to a width of 800 pixels
+- Runs the GA with a population of 1000 and 3000 generations (~3 million trials)
+- Uses between 20 and 70 images per collage
+- Applies a mutation rate of 0.1 and a crossover rate of 0.7
+- Saves the final collage as `output.jpg` in the current directory
+
+## Example Output
+
+For a simpler test, consider a smaller run:
+
+```bash
+.\target\release\ImageGridOptimizer .\_test_dir\ --min-images 10 --max-images 20
+```
+
+This will create a collage using between 10 and 20 images from the `test_images` directory. The result look like:
+
+![Collage Example](output.jpg)
+
 
 ## Contributing
 
-Contributions are welcome! Please fork the repository and create a pull request with your changes.
+Contributions are welcome!
+- Fork the repository
+- Create a new branch for your feature or bugfix
+- Open a pull request
 
+## Releasing a Version
 
-## Release
+To create a tagged release, for example version `v1.0`:
 
-```shell
+```bash
 git tag v1.0
 git push origin v1.0
 ```
-
-
 
 ## License
 
