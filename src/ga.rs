@@ -2,10 +2,11 @@ use rand::Rng;
 use rand::seq::SliceRandom;
 use std::collections::{HashMap, HashSet};
 
-use crate::packing::{aspect, leaf_count, collect_ids, Slot};
+use crate::packing::{layout_metrics, leaf_count, collect_ids, Slot};
 
 const ASPECT_WEIGHT: f64 = 2.0;
-const BALANCE_WEIGHT: f64 = 3.0;
+const WHITE_WEIGHT: f64 = 8.0;
+const UNIFORM_WEIGHT: f64 = 2.0;
 
 #[derive(Clone)]
 pub struct Individual {
@@ -19,7 +20,8 @@ pub fn create_random_individual(
     max_images: usize,
     rng: &mut impl Rng,
 ) -> Individual {
-    let n = rng.gen_range(min_images..=max_images).clamp(1, pool.len());
+    let (lo, hi) = (min_images.min(max_images), min_images.max(max_images));
+    let n = rng.gen_range(lo..=hi).clamp(1, pool.len());
     let mut ids: Vec<u32> = pool.to_vec();
     ids.shuffle(rng);
     ids.truncate(n);
@@ -58,36 +60,24 @@ fn build_random_tree(ids: &[u32], rng: &mut impl Rng) -> Slot {
 }
 
 // Fitness rewards using many images while keeping the overall aspect ratio near
-// the target and the image areas balanced (so no single image dwarfs the rest).
-pub fn evaluate_individual(indiv: &mut Individual, aspects: &HashMap<u32, f64>, target_aspect: f64) {
-    let a_root = aspect(&indiv.tree, aspects);
-    let mut areas = Vec::new();
-    leaf_areas(&indiv.tree, 1.0, aspects, &mut areas);
-
-    let aspect_penalty = (a_root / target_aspect).ln().abs();
-    let (min_a, max_a) = areas.iter().fold((f64::MAX, f64::MIN), |(lo, hi), &a| (lo.min(a), hi.max(a)));
-    let balance_penalty = (max_a / min_a).ln();
-
-    let n = areas.len() as f64;
-    indiv.fitness = n / (1.0 + aspect_penalty * ASPECT_WEIGHT + balance_penalty * BALANCE_WEIGHT);
-}
-
-// Fraction of the canvas area each leaf receives, derived analytically from the
-// same split rules used in packing::assign (scale-invariant, no pixel rounding).
-fn leaf_areas(node: &Slot, area: f64, aspects: &HashMap<u32, f64>, out: &mut Vec<f64>) {
-    match node {
-        Slot::Leaf { .. } => out.push(area),
-        Slot::Cut { vertical, left, right } => {
-            let (al, ar) = (aspect(left, aspects), aspect(right, aspects));
-            let (frac_left, frac_right) = if *vertical {
-                (al / (al + ar), ar / (al + ar))
-            } else {
-                (ar / (al + ar), al / (al + ar))
-            };
-            leaf_areas(left, area * frac_left, aspects, out);
-            leaf_areas(right, area * frac_right, aspects, out);
-        }
-    }
+// the target and the measured white fraction of the packed layout low. White is
+// minimised at every flex level — that is the actual goal.
+pub fn evaluate_individual(
+    indiv: &mut Individual,
+    aspects: &HashMap<u32, f64>,
+    dims: &HashMap<u32, (f64, f64)>,
+    target_aspect: f64,
+    flex: f64,
+) {
+    let (aspect_ratio, white, uniformity) = layout_metrics(&indiv.tree, aspects, dims, flex);
+    let aspect_penalty = (aspect_ratio / target_aspect).ln().abs();
+    let n = leaf_count(&indiv.tree) as f64;
+    // Uniformity only matters at high flex (where white is already ~0); at flex=0
+    // it is off so images keep their distinct native sizes.
+    let fitness = n / (1.0 + aspect_penalty * ASPECT_WEIGHT + white * WHITE_WEIGHT + flex * uniformity * UNIFORM_WEIGHT);
+    // Degenerate inputs (e.g. a poisoned dimension) could yield a non-finite
+    // score; treat those as worst so they never win and never break the sort.
+    indiv.fitness = if fitness.is_finite() { fitness } else { 0.0 };
 }
 
 pub fn mutate(indiv: &mut Individual, pool: &[u32], min_images: usize, max_images: usize, allow_rotate: bool, rng: &mut impl Rng) {
@@ -117,7 +107,11 @@ pub fn mutate(indiv: &mut Individual, pool: &[u32], min_images: usize, max_image
         1 => {
             let mut ids = Vec::new();
             collect_ids(&indiv.tree, &mut ids);
-            let (i, j) = (rng.gen_range(0..ids.len()), rng.gen_range(0..ids.len()));
+            let i = rng.gen_range(0..ids.len());
+            let mut j = rng.gen_range(0..ids.len());
+            while j == i {
+                j = rng.gen_range(0..ids.len());
+            }
             ids.swap(i, j);
             write_ids(&mut indiv.tree, &mut ids.into_iter());
         }
@@ -135,10 +129,8 @@ pub fn mutate(indiv: &mut Individual, pool: &[u32], min_images: usize, max_image
             grow_nth_leaf(&mut indiv.tree, target, &mut 0, new_id, vertical);
         }
         4 => {
-            let cuts = count_cuts(&indiv.tree);
-            let target = rng.gen_range(0..cuts);
-            let keep_left = rng.gen::<bool>();
-            shrink_nth_cut(&mut indiv.tree, target, &mut 0, keep_left);
+            let target = rng.gen_range(0..leaves);
+            remove_nth_leaf(&mut indiv.tree, target, &mut 0);
         }
         5 => {
             let target = rng.gen_range(0..leaves);
@@ -230,16 +222,30 @@ fn grow_nth_leaf(node: &mut Slot, target: usize, counter: &mut usize, new_id: u3
     }
 }
 
-fn shrink_nth_cut(node: &mut Slot, target: usize, counter: &mut usize, keep_left: bool) -> bool {
+// Remove exactly ONE leaf (the target-th in DFS order) by collapsing its parent
+// cut to the sibling subtree, so leaf_count drops by exactly one and the
+// min_images guard holds. The sentinel leaf is immediately dropped together with
+// the discarded child box — id 0 never enters the tree.
+fn remove_nth_leaf(node: &mut Slot, target: usize, counter: &mut usize) -> bool {
     if let Slot::Cut { left, right, .. } = node {
-        if *counter == target {
-            let kept = if keep_left { left.as_mut() } else { right.as_mut() };
-            *node = std::mem::replace(kept, Slot::Leaf { id: 0, rotated: false });
+        if let Slot::Leaf { .. } = **left {
+            if *counter == target {
+                *node = std::mem::replace(right.as_mut(), Slot::Leaf { id: 0, rotated: false });
+                return true;
+            }
+            *counter += 1;
+        } else if remove_nth_leaf(left, target, counter) {
             return true;
         }
-        *counter += 1;
-        return shrink_nth_cut(left, target, counter, keep_left)
-            || shrink_nth_cut(right, target, counter, keep_left);
+        if let Slot::Leaf { .. } = **right {
+            if *counter == target {
+                *node = std::mem::replace(left.as_mut(), Slot::Leaf { id: 0, rotated: false });
+                return true;
+            }
+            *counter += 1;
+        } else if remove_nth_leaf(right, target, counter) {
+            return true;
+        }
     }
     false
 }

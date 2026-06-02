@@ -3,7 +3,6 @@ use image::imageops::{resize, FilterType};
 use image::{DynamicImage, GenericImageView};
 
 pub fn load_images(dir: &str, filter: Option<String>, standard_width: Option<u32>) -> Vec<(u32, DynamicImage)> {
-    println!("Loading images from directory: {}", dir);
     let entries = match fs::read_dir(dir) {
         Ok(entries) => entries,
         Err(e) => {
@@ -35,11 +34,8 @@ pub fn load_images(dir: &str, filter: Option<String>, standard_width: Option<u32
         };
 
         if path.is_file() && passes_filter {
-            println!("Opening image: {}", path.display());
-            let img_result = image::open(&path);
-            match img_result {
+            match image::open(&path) {
                 Ok(img) => {
-                    println!("Successfully opened: {}", path.display());
                     let scaled_img = scale_to_standard_width(&img, standard_width);
                     images.push((id_counter, scaled_img));
                     id_counter += 1;
@@ -49,8 +45,6 @@ pub fn load_images(dir: &str, filter: Option<String>, standard_width: Option<u32
                     continue;
                 }
             }
-        } else {
-            println!("Skipping: {}", path.display());
         }
     }
 
@@ -63,8 +57,9 @@ fn scale_to_standard_width(
     standard_width: Option<u32>,
 ) -> DynamicImage {
     if let Some(width) = standard_width {
+        let width = width.max(1);
         let (current_width, current_height) = img.dimensions();
-        let new_height = (width as f64 / current_width as f64 * current_height as f64) as u32;
+        let new_height = ((width as f64 / current_width as f64 * current_height as f64) as u32).max(1);
         let rgba_img = img.to_rgba8();
         let resized = resize(&rgba_img, width, new_height, FilterType::Lanczos3);
         DynamicImage::ImageRgba8(resized)

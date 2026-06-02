@@ -60,8 +60,11 @@ pub fn parse_args() -> Config {
         min_images: matches.value_of("min_images").unwrap_or("6").parse().expect("Invalid min_images"),
         max_images: matches.value_of("max_images").unwrap_or("60").parse().expect("Invalid max_images"),
         mutation_rate: matches.value_of("mutation_rate").unwrap_or("0.3").parse().expect("Invalid mutation rate"),
-        target_aspect: matches.value_of("aspect").unwrap_or("1.0").parse().expect("Invalid aspect"),
-        flex: matches.value_of("flex").unwrap_or("1.0").parse().expect("Invalid flex"),
+        target_aspect: {
+            let a: f64 = matches.value_of("aspect").unwrap_or("1.0").parse().expect("Invalid aspect");
+            if a > 0.0 { a } else { panic!("--aspect must be greater than 0, got {}", a) }
+        },
+        flex: matches.value_of("flex").unwrap_or("1.0").parse::<f64>().expect("Invalid flex").clamp(0.0, 1.0),
         gutter: matches.value_of("gutter").unwrap_or("8").parse().expect("Invalid gutter"),
         margin: matches.value_of("margin").unwrap_or("12").parse().expect("Invalid margin"),
         width: matches.value_of("out_width").unwrap_or("1600").parse().expect("Invalid width"),

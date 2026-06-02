@@ -8,7 +8,7 @@ ImageGridOptimizer arranges a directory of images into a single, **gap-free** co
 
 - **Gap-free slicing-tree layout** — the canvas is recursively split so image cells tessellate exactly; no interstitial white holes, no rigid grid forced onto varied photos.
 - **Aspect ratios preserved** — images are never stretched or cropped; mixed landscape/portrait/square photos interlock into a clean mosaic.
-- **`--flex` slider (0..1)** — `1` fills every cell (dense, gap-free); `0` keeps each image at its native relative size with whitespace around it; values in between blend continuously.
+- **`--flex` slider (0..1)** — per-image scaling freedom. `1` lets each image scale freely so the mosaic is gap-free; `0` keeps every image at its original size and packs them as tightly as fixed sizes allow; values in between blend continuously. The goal is always minimal whitespace.
 - **Subset selection** — feed in more images than you need; the GA chooses which subset (between `--min-images` and `--max-images`) packs best. Each image is used at most once.
 - **Controllable aspect ratio** — `--aspect` steers the overall width/height of the collage.
 - **Optional 90° rotation** — `--rotate` lets the GA flip images to pack extreme aspect ratios more tightly.
@@ -16,18 +16,20 @@ ImageGridOptimizer arranges a directory of images into a single, **gap-free** co
 
 ## How It Works
 
-Each leaf of the slicing tree is one image; each internal node is a horizontal or vertical cut. Aspect ratios combine bottom-up, which is what guarantees a perfect tessellation:
+Each leaf of the slicing tree is one image; each internal node is a horizontal or vertical cut. For a given `--flex`, every image is scaled between its original size (`flex=0`) and its gap-free tessellation size (`flex=1`), then the tree is packed bottom-up — children placed flush, centered on the shorter axis. At `flex=1` sibling extents match exactly and the layout is gap-free; at `flex=0` images keep their original size and only the unavoidable mismatch gaps remain.
+
+The gap-free target size comes from combining aspect ratios bottom-up:
 
 - **side by side** (equal height): `a = a_left + a_right`
 - **stacked** (equal width): `1/a = 1/a_top + 1/a_bottom`
 
-The root's aspect ratio determines the canvas shape; pixel boxes are then assigned top-down with integer split points (no seams). The genetic algorithm evolves the tree — flipping cuts, swapping images, adding/removing images, toggling rotation — and scores each candidate with
+The genetic algorithm evolves the tree — flipping cuts, swapping images, adding/removing images, toggling 90° rotation — and scores each candidate by the **measured white fraction** of the packed layout and how close its bounding box is to the target aspect ratio:
 
 ```
-fitness = image_count / (1 + |ln(aspect / target_aspect)| * 2 + size_imbalance * 3)
+fitness = image_count / (1 + |ln(aspect / target_aspect)| * 2 + white_fraction * 8)
 ```
 
-so it favours collages that use many images, match the target aspect ratio, and keep image sizes balanced. Because the layout is gap-free by construction, "minimise whitespace" is no longer part of the objective — `--flex` handles whitespace at render time instead.
+so it favours collages that use many images, hit the target aspect ratio, and waste little space — at every flex level.
 
 ## Getting Started
 
@@ -48,7 +50,7 @@ cargo build --release
 | Option | Description | Default |
 |--------|-------------|---------|
 | `-f, --filter <F>` | Keep only images whose name contains `F` (extension or substring). | – |
-| `--flex <0..1>` | `1` = gap-free fill, `0` = native sizes with whitespace. | `1.0` |
+| `--flex <0..1>` | Per-image scaling freedom: `1` = gap-free, `0` = original sizes packed tight. | `1.0` |
 | `--aspect <A>` | Target width/height of the whole collage. | `1.0` |
 | `--rotate` | Allow 90° rotation for tighter packing. | off |
 | `--min-images <N>` / `--max-images <N>` | Subset-size window. | `6` / `60` |
@@ -88,7 +90,7 @@ uv run generate_test_images.py        # writes _test_dir/{easy,medium,hard}
 |:----:|:------:|:----:|
 | ![easy](examples/easy.jpg) | ![medium](examples/medium.jpg) | ![hard](examples/hard.jpg) |
 
-**The `--flex` slider** — same images, gap-free fill vs. native sizes:
+**The `--flex` slider** — same images: scale freely for a gap-free mosaic vs. keep original sizes packed tight:
 
 | `--flex 1.0` | `--flex 0.0` |
 |:------------:|:------------:|
