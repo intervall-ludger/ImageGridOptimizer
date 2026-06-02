@@ -1,6 +1,6 @@
 [package]
 name = "ImageGridOptimizer"
-version = "2.0.0"
+version = "3.0.0"
 authors = ["Ludger Radke"]
 edition = "2021"
 
@@ -10,4 +10,3 @@ clap = "2.33.0"
 rayon = "1.5"
 indicatif = "0.17.6"
 rand = "0.8"
-rect_packer = "0.2.1"

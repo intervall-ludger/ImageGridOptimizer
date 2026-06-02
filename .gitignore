@@ -17,3 +17,11 @@ Cargo.lock
 # Added by cargo
 
 /target
+
+# Generated test images (reproducible via generate_test_images.py)
+/_test_dir/easy/
+/_test_dir/medium/
+/_test_dir/hard/
+
+# Program output artifact
+output.jpg

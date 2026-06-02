@@ -1,59 +1,71 @@
-use image::{DynamicImage, Rgba, GenericImage};
-use rect_packer::Rect;
+use image::{DynamicImage, GenericImage, GenericImageView, Rgba};
+use image::imageops::FilterType;
 use std::collections::HashMap;
+
+use crate::packing::Cell;
 
 pub fn create_collage(
     images: &HashMap<u32, DynamicImage>,
-    packed_locations: &[(u32, Rect)],
-    max_width: u32,
-    max_height: u32,
+    cells: &[Cell],
+    content_w: u32,
+    content_h: u32,
+    flex: f64,
+    gutter: u32,
+    margin: u32,
 ) -> DynamicImage {
-    println!("Creating collage...");
-    println!("Collage dimensions: Width = {}, Height = {}", max_width, max_height);
+    let canvas_w = content_w + 2 * margin;
+    let canvas_h = content_h + 2 * margin;
+    println!("Collage: {}x{} ({} images, flex={})", canvas_w, canvas_h, cells.len(), flex);
 
-    let mut min_x = u32::MAX;
-    let mut min_y = u32::MAX;
-    let mut max_x = 0;
-    let mut max_y = 0;
-
-    for (id, rect) in packed_locations {
-        let x_end = (rect.x + rect.width) as u32;
-        let y_end = (rect.y + rect.height) as u32;
-
-        if (rect.x as u32) < min_x { min_x = rect.x as u32; }
-        if (rect.y as u32) < min_y { min_y = rect.y as u32; }
-        if x_end > max_x { max_x = x_end; }
-        if y_end > max_y { max_y = y_end; }
-
-        println!(
-            "Image ID: {}, Position: ({}, {}), Size: {}x{}",
-            id, rect.x, rect.y, rect.width, rect.height
-        );
-    }
-
-    let bounding_width = max_x - min_x;
-    let bounding_height = max_y - min_y;
-
-    let offset_x = (max_width.saturating_sub(bounding_width)) / 2;
-    let offset_y = (max_height.saturating_sub(bounding_height)) / 2;
-
-    let mut collage = DynamicImage::new_rgba8(max_width, max_height);
-
-    // Fill background with white
-    for y in 0..max_height {
-        for x in 0..max_width {
+    let mut collage = DynamicImage::new_rgba8(canvas_w, canvas_h);
+    for y in 0..canvas_h {
+        for x in 0..canvas_w {
             collage.put_pixel(x, y, Rgba([255, 255, 255, 255]));
         }
     }
 
-    // Place images with offset
-    for (id, rect) in packed_locations {
-        if let Some(img) = images.get(id) {
-            let target_x = offset_x + (rect.x as u32 - min_x);
-            let target_y = offset_y + (rect.y as u32 - min_y);
-            collage.copy_from(img, target_x, target_y).unwrap();
-        }
+    // flex=0 draws every image at a common native scale (gaps appear), flex=1
+    // fills each cell completely (gap-free). The shared scale k is the largest
+    // factor that keeps every native image inside its cell.
+    let k = cells
+        .iter()
+        .map(|c| {
+            let (w, h) = images[&c.id].dimensions();
+            cell_inner(c, gutter) / (w as f64 * h as f64)
+        })
+        .fold(f64::MAX, f64::min);
+
+    for cell in cells {
+        let rotated_img;
+        let img: &DynamicImage = if cell.rotated {
+            rotated_img = images[&cell.id].rotate90();
+            &rotated_img
+        } else {
+            &images[&cell.id]
+        };
+        let (src_w, src_h) = img.dimensions();
+        let native_fill = (k * src_w as f64 * src_h as f64 / cell_inner(cell, gutter)).sqrt();
+        let fill = native_fill + flex * (1.0 - native_fill);
+
+        // Contain-fit into the gutter-reduced cell preserves the aspect ratio
+        // exactly; `fill` then shrinks it toward its native size for low flex.
+        let avail_w = cell.w.saturating_sub(gutter) as f64;
+        let avail_h = cell.h.saturating_sub(gutter) as f64;
+        let scale = (avail_w / src_w as f64).min(avail_h / src_h as f64) * fill;
+        let draw_w = (src_w as f64 * scale).round().max(1.0) as u32;
+        let draw_h = (src_h as f64 * scale).round().max(1.0) as u32;
+
+        let resized = img.resize_exact(draw_w, draw_h, FilterType::Lanczos3);
+        let tx = margin + cell.x + (cell.w.saturating_sub(draw_w)) / 2;
+        let ty = margin + cell.y + (cell.h.saturating_sub(draw_h)) / 2;
+        collage.copy_from(&resized, tx, ty).unwrap();
     }
 
     collage
+}
+
+fn cell_inner(cell: &Cell, gutter: u32) -> f64 {
+    let w = cell.w.saturating_sub(gutter) as f64;
+    let h = cell.h.saturating_sub(gutter) as f64;
+    (w * h).max(1.0)
 }

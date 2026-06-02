@@ -8,100 +8,87 @@ mod collage;
 
 use crate::cli::parse_args;
 use crate::image_handling::load_images;
-use crate::ga::{create_random_individual, evaluate_individual, crossover, mutate, enforce_image_limits, Individual};
+use crate::ga::{create_random_individual, evaluate_individual, mutate, Individual};
+use crate::packing::{aspect, assign};
 use crate::collage::create_collage;
-use crate::packing::DESIRED_ASPECT_RATIO;
+use image::GenericImageView;
 use rand::seq::SliceRandom;
 use rand::Rng;
 use rayon::prelude::*;
 
 fn main() {
-    let (dir, filter, standard_width, population_size, generations, min_images, max_images, mutation_rate, crossover_rate) = parse_args();
-    println!("Parameters:");
-    println!("Directory: {}", dir);
-    println!("Filter: {:?}", filter);
-    println!("Standard width: {:?}", standard_width);
-    println!("Population size: {}", population_size);
-    println!("Generations: {}", generations);
-    println!("min_images: {}", min_images);
-    println!("max_images: {}", max_images);
-    println!("Mutation rate: {}", mutation_rate);
-    println!("Crossover rate: {}", crossover_rate);
-    println!("Desired aspect ratio: {}", DESIRED_ASPECT_RATIO);
-
-    println!("Loading images...");
-    let images_vec = load_images(&dir, filter, standard_width);
+    let cfg = parse_args();
+    println!("Loading images from {}...", cfg.dir);
+    let images_vec = load_images(&cfg.dir, cfg.filter.clone(), cfg.standard_width);
     if images_vec.is_empty() {
         eprintln!("No images loaded.");
         return;
     }
 
-    let image_map: HashMap<u32, image::DynamicImage> = images_vec.into_iter().collect();
-    let mut rng = rand::thread_rng();
-
-    let all_images = image_map.iter().map(|(id,i)|(id.clone(),i.clone())).collect::<Vec<_>>();
-    let mut population: Vec<Individual> = (0..population_size)
-        .map(|_| create_random_individual(&all_images, min_images, max_images, &mut rng))
+    let aspects: HashMap<u32, f64> = images_vec
+        .iter()
+        .map(|(id, img)| {
+            let (w, h) = img.dimensions();
+            (*id, w as f64 / h as f64)
+        })
         .collect();
+    let image_map: HashMap<u32, image::DynamicImage> = images_vec.into_iter().collect();
+    let pool: Vec<u32> = image_map.keys().copied().collect();
 
-    // Evaluate initial population in parallel
-    population.par_iter_mut().for_each(|indiv| {
-        evaluate_individual(indiv, &image_map);
-    });
+    let max_images = cfg.max_images.min(pool.len());
+    let min_images = cfg.min_images.min(max_images).max(1);
 
-    // GA main loop
-    for gen in 1..=generations {
-        population.sort_by(|a,b| b.fitness.partial_cmp(&a.fitness).unwrap());
-        println!("Generation {}: Best fitness = {:.5}", gen, population[0].fitness);
+    let mut rng = rand::thread_rng();
+    let mut population: Vec<Individual> = (0..cfg.population_size)
+        .map(|_| create_random_individual(&pool, min_images, max_images, &mut rng))
+        .collect();
+    population.par_iter_mut().for_each(|ind| evaluate_individual(ind, &aspects, cfg.target_aspect));
 
-        let half = population_size/2;
-        let elites = &population[..half];
-
-        let mut new_population = Vec::new();
-        // Keep elites
-        new_population.extend_from_slice(elites);
-
-        // Create new individuals
-        while new_population.len() < population_size {
-            let parent1 = elites.choose(&mut rng).unwrap();
-            let parent2 = elites.choose(&mut rng).unwrap();
-
-            let mut child = if rng.gen::<f64>() < crossover_rate {
-                crossover(parent1, parent2, &all_images, min_images, max_images, &mut rng)
-            } else {
-                let mut c = parent1.clone();
-                enforce_image_limits(&mut c.image_ids, &all_images, min_images, max_images, &mut rng);
-                c
-            };
-
-            if rng.gen::<f64>() < mutation_rate {
-                mutate(&mut child, &all_images, min_images, max_images, &mut rng);
-            }
-
-            new_population.push(child);
+    for gen in 1..=cfg.generations {
+        population.sort_by(|a, b| b.fitness.partial_cmp(&a.fitness).unwrap());
+        if gen % 50 == 0 || gen == 1 {
+            println!("Generation {}: Best fitness = {:.5}", gen, population[0].fitness);
         }
 
-        // Evaluate the new population in parallel
-        new_population.par_iter_mut().for_each(|indiv| {
-            evaluate_individual(indiv, &image_map);
-        });
+        let half = (cfg.population_size / 2).max(1);
+        let elites = population[..half].to_vec();
 
-        population = new_population;
+        let mut next = elites.clone();
+        while next.len() < cfg.population_size {
+            let mut child = elites.choose(&mut rng).unwrap().clone();
+            mutate(&mut child, &pool, min_images, max_images, cfg.allow_rotate, &mut rng);
+            while rng.gen::<f64>() < cfg.mutation_rate {
+                mutate(&mut child, &pool, min_images, max_images, cfg.allow_rotate, &mut rng);
+            }
+            next.push(child);
+        }
+
+        next.par_iter_mut().for_each(|ind| evaluate_individual(ind, &aspects, cfg.target_aspect));
+        population = next;
     }
 
-    // Final solution
-    population.sort_by(|a,b| b.fitness.partial_cmp(&a.fitness).unwrap());
+    population.sort_by(|a, b| b.fitness.partial_cmp(&a.fitness).unwrap());
     let best = &population[0];
     println!("Best solution fitness: {:.5}", best.fitness);
 
-    if let Some((packed_locations, w, h)) = &best.packed_layout {
-        let collage = create_collage(&image_map, packed_locations, *w, *h);
-        println!("Saving image as 'output.jpg'...");
-        match collage.save("output.jpg") {
-            Ok(_) => println!("Image saved successfully."),
-            Err(e) => eprintln!("Error saving image: {}", e),
-        }
-    } else {
-        eprintln!("No layout found for the best solution.");
+    let a_root = aspect(&best.tree, &aspects);
+    let content_w = cfg.width;
+    let content_h = (content_w as f64 / a_root).round().max(1.0) as u32;
+    let mut cells = Vec::new();
+    assign(&best.tree, 0, 0, content_w, content_h, &aspects, &mut cells);
+
+    // Every image is used at most once: ids start unique and mutations only ever
+    // pull from unused ids, so the layout can never repeat an image.
+    debug_assert_eq!(
+        cells.iter().map(|c| c.id).collect::<std::collections::HashSet<_>>().len(),
+        cells.len(),
+        "layout contains a duplicate image"
+    );
+
+    let collage = create_collage(&image_map, &cells, content_w, content_h, cfg.flex, cfg.gutter, cfg.margin);
+    println!("Saving image as 'output.jpg'...");
+    match collage.save("output.jpg") {
+        Ok(_) => println!("Image saved successfully."),
+        Err(e) => eprintln!("Error saving image: {}", e),
     }
 }

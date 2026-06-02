@@ -1,69 +1,76 @@
 use std::collections::HashMap;
-use image::{DynamicImage, GenericImageView};
-use rect_packer::{Config, Packer, Rect};
 
-pub const DESIRED_ASPECT_RATIO: f64 = 1.0;
-const PADDING_SIZE: u32 = 5;
+// Binary slicing tree: every leaf is one image, every cut splits the region.
+#[derive(Clone)]
+pub enum Slot {
+    Leaf { id: u32, rotated: bool },
+    Cut { vertical: bool, left: Box<Slot>, right: Box<Slot> },
+}
 
-pub fn pack_images(
-    image_ids: &Vec<u32>,
-    image_map: &HashMap<u32, DynamicImage>,
-) -> (Vec<(u32, Rect)>, u32, u32) {
-    if image_ids.is_empty() {
-        return (vec![], 0, 0);
-    }
+#[derive(Clone, Copy)]
+pub struct Cell {
+    pub id: u32,
+    pub x: u32,
+    pub y: u32,
+    pub w: u32,
+    pub h: u32,
+    pub rotated: bool,
+}
 
-    let total_area: u64 = image_ids.iter().map(|id| {
-        let img = image_map.get(id).unwrap();
-        let (w, h) = img.dimensions();
-        (w as u64) * (h as u64)
-    }).sum();
-
-    let estimated_height = ((total_area as f64 / DESIRED_ASPECT_RATIO).sqrt()) as u32;
-    let estimated_width = (DESIRED_ASPECT_RATIO * estimated_height as f64) as u32;
-
-    let mut scale_factor = 1.0;
-    let max_attempts = 5;
-    for _attempt in 0..max_attempts {
-        let pack_w = (estimated_width as f64 * scale_factor) as i32;
-        let pack_h = (estimated_height as f64 * scale_factor) as i32;
-
-        let config = Config {
-            width: pack_w,
-            height: pack_h,
-            border_padding: 0,
-            rectangle_padding: PADDING_SIZE as i32,
-        };
-
-        let mut packer = Packer::new(config);
-        let mut packed_locations = Vec::new();
-        let mut max_width = 0;
-        let mut max_height = 0;
-
-        let mut all_fit = true;
-        for id in image_ids {
-            let img = image_map.get(id).unwrap();
-            let (w, h) = img.dimensions();
-            if let Some(rect) = packer.pack(w as i32, h as i32, false) {
-                packed_locations.push((*id, rect));
-                if (rect.x + rect.width) as u32 > max_width {
-                    max_width = (rect.x + rect.width) as u32;
-                }
-                if (rect.y + rect.height) as u32 > max_height {
-                    max_height = (rect.y + rect.height) as u32;
-                }
+// Aspect ratio of a subtree, combined bottom-up so the layout preserves every
+// image's own ratio: side-by-side adds ratios, stacked adds inverse ratios.
+// A rotated leaf contributes the inverse of its native aspect ratio.
+pub fn aspect(node: &Slot, aspects: &HashMap<u32, f64>) -> f64 {
+    match node {
+        Slot::Leaf { id, rotated } => {
+            let a = aspects[id];
+            if *rotated { 1.0 / a } else { a }
+        }
+        Slot::Cut { vertical, left, right } => {
+            let (al, ar) = (aspect(left, aspects), aspect(right, aspects));
+            if *vertical {
+                al + ar
             } else {
-                all_fit = false;
-                break;
+                1.0 / (1.0 / al + 1.0 / ar)
             }
         }
-
-        if all_fit {
-            return (packed_locations, max_width, max_height);
-        }
-
-        scale_factor *= 1.2;
     }
+}
 
-    (vec![], 0, 0)
+// Hand each subtree an exact pixel box; integer split points are derived as
+// differences so neighbours share an edge with no gap and no seam.
+pub fn assign(node: &Slot, x: u32, y: u32, w: u32, h: u32, aspects: &HashMap<u32, f64>, out: &mut Vec<Cell>) {
+    match node {
+        Slot::Leaf { id, rotated } => out.push(Cell { id: *id, x, y, w, h, rotated: *rotated }),
+        Slot::Cut { vertical, left, right } => {
+            let (al, ar) = (aspect(left, aspects), aspect(right, aspects));
+            if *vertical {
+                let wl = ((w as f64) * al / (al + ar)).round() as u32;
+                assign(left, x, y, wl, h, aspects, out);
+                assign(right, x + wl, y, w - wl, h, aspects, out);
+            } else {
+                // Heights are proportional to the inverse aspect ratio.
+                let ht = ((h as f64) * ar / (al + ar)).round() as u32;
+                assign(left, x, y, w, ht, aspects, out);
+                assign(right, x, y + ht, w, h - ht, aspects, out);
+            }
+        }
+    }
+}
+
+pub fn collect_ids(node: &Slot, out: &mut Vec<u32>) {
+    match node {
+        Slot::Leaf { id, .. } => out.push(*id),
+        Slot::Cut { left, right, .. } => {
+            collect_ids(left, out);
+            collect_ids(right, out);
+        }
+    }
+}
+
+pub fn leaf_count(node: &Slot) -> usize {
+    match node {
+        Slot::Leaf { .. } => 1,
+        Slot::Cut { left, right, .. } => leaf_count(left) + leaf_count(right),
+    }
 }
