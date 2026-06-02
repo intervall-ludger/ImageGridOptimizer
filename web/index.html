@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ImageGridOptimizer</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,300,0,0" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -48,13 +49,21 @@
         <div class="row"><label>Generations <output id="gensOut">400</output></label><input type="range" id="gens" min="50" max="1500" step="50" value="400" /></div>
       </details>
 
-      <button id="generate" disabled>Generate collage</button>
-      <button id="download" disabled>Download</button>
+      <button id="download" disabled>Download collage</button>
       <p class="status" id="status">Add some images to start.</p>
     </section>
 
     <section class="panel preview">
       <canvas id="canvas"></canvas>
+    </section>
+
+    <section class="panel gallery">
+      <div class="gallery-head">
+        <strong>Images</strong>
+        <span id="galleryCount" class="muted"></span>
+      </div>
+      <p class="legend">Pin forces an image in. Remove with the corner button. Faded images were not used.</p>
+      <div id="gallery" class="thumbs"></div>
     </section>
   </main>
 

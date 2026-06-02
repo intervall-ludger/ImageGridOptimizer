@@ -16,15 +16,23 @@ pub struct Individual {
 
 pub fn create_random_individual(
     pool: &[u32],
+    forced: &[u32],
     min_images: usize,
     max_images: usize,
     rng: &mut impl Rng,
 ) -> Individual {
-    let (lo, hi) = (min_images.min(max_images), min_images.max(max_images));
-    let n = rng.gen_range(lo..=hi).clamp(1, pool.len());
-    let mut ids: Vec<u32> = pool.to_vec();
+    let forced_set: HashSet<u32> = forced.iter().copied().collect();
+    let lo = min_images.max(forced.len()).max(1);
+    let hi = max_images.max(lo).min(pool.len());
+    let n = rng.gen_range(lo.min(hi)..=hi);
+
+    // Forced images are always present; the rest of the slots are filled randomly.
+    let mut ids: Vec<u32> = forced.to_vec();
+    let mut rest: Vec<u32> = pool.iter().copied().filter(|id| !forced_set.contains(id)).collect();
+    rest.shuffle(rng);
+    ids.extend(rest.into_iter().take(n.saturating_sub(ids.len())));
     ids.shuffle(rng);
-    ids.truncate(n);
+
     // Half the population starts from balanced trees (which tile uniform images
     // into a clean grid); the rest start random for mosaic diversity.
     let tree = if rng.gen::<bool>() {
@@ -80,23 +88,27 @@ pub fn evaluate_individual(
     indiv.fitness = if fitness.is_finite() { fitness } else { 0.0 };
 }
 
-pub fn mutate(indiv: &mut Individual, pool: &[u32], min_images: usize, max_images: usize, allow_rotate: bool, rng: &mut impl Rng) {
-    let leaves = leaf_count(&indiv.tree);
+pub fn mutate(indiv: &mut Individual, pool: &[u32], forced: &HashSet<u32>, min_images: usize, max_images: usize, allow_rotate: bool, rng: &mut impl Rng) {
+    let mut ids = Vec::new();
+    collect_ids(&indiv.tree, &mut ids);
+    let leaves = ids.len();
     let unused = unused_ids(&indiv.tree, pool);
+    // DFS positions of leaves that may be removed or replaced (forced ones are pinned).
+    let removable: Vec<usize> = (0..leaves).filter(|&i| !forced.contains(&ids[i])).collect();
 
     // Build the set of moves valid for the current tree, then pick one.
     let mut moves: Vec<u8> = vec![0]; // 0 = flip a cut (always valid for >1 leaf, no-op otherwise)
     if leaves >= 2 {
         moves.push(1); // swap two images
     }
-    if !unused.is_empty() {
-        moves.push(2); // replace an image with an unused one
-        if leaves < max_images {
-            moves.push(3); // grow: split a leaf into two
-        }
+    if !unused.is_empty() && !removable.is_empty() {
+        moves.push(2); // replace a non-forced image with an unused one
     }
-    if leaves > min_images && leaves > 1 {
-        moves.push(4); // shrink: collapse a cut
+    if !unused.is_empty() && leaves < max_images {
+        moves.push(3); // grow: split a leaf into two
+    }
+    if leaves > min_images && !removable.is_empty() {
+        moves.push(4); // shrink: remove a non-forced leaf
     }
     if allow_rotate {
         moves.push(5); // toggle a leaf's 90-degree rotation
@@ -105,8 +117,6 @@ pub fn mutate(indiv: &mut Individual, pool: &[u32], min_images: usize, max_image
     match *moves.choose(rng).unwrap() {
         0 => flip_random_cut(&mut indiv.tree, rng),
         1 => {
-            let mut ids = Vec::new();
-            collect_ids(&indiv.tree, &mut ids);
             let i = rng.gen_range(0..ids.len());
             let mut j = rng.gen_range(0..ids.len());
             while j == i {
@@ -116,9 +126,7 @@ pub fn mutate(indiv: &mut Individual, pool: &[u32], min_images: usize, max_image
             write_ids(&mut indiv.tree, &mut ids.into_iter());
         }
         2 => {
-            let mut ids = Vec::new();
-            collect_ids(&indiv.tree, &mut ids);
-            let i = rng.gen_range(0..ids.len());
+            let i = *removable.choose(rng).unwrap();
             ids[i] = *unused.choose(rng).unwrap();
             write_ids(&mut indiv.tree, &mut ids.into_iter());
         }
@@ -129,7 +137,7 @@ pub fn mutate(indiv: &mut Individual, pool: &[u32], min_images: usize, max_image
             grow_nth_leaf(&mut indiv.tree, target, &mut 0, new_id, vertical);
         }
         4 => {
-            let target = rng.gen_range(0..leaves);
+            let target = *removable.choose(rng).unwrap();
             remove_nth_leaf(&mut indiv.tree, target, &mut 0);
         }
         5 => {

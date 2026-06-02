@@ -38,6 +38,7 @@ fn main() {
         generations: cfg.generations,
         mutation_rate: cfg.mutation_rate,
         width: cfg.width,
+        forced: Vec::new(),
     };
 
     println!("Packing {} images...", dims.len());

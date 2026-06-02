@@ -4,7 +4,7 @@ pub mod ga;
 #[cfg(feature = "wasm")]
 pub mod wasm;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::ga::{create_random_individual, evaluate_individual, mutate, Individual};
 use crate::packing::{layout_cells, Cell};
@@ -21,6 +21,8 @@ pub struct Params {
     pub generations: usize,
     pub mutation_rate: f64,
     pub width: u32,
+    /// Image ids that must appear in every layout.
+    pub forced: Vec<u32>,
 }
 
 // Run the genetic algorithm over the image dimensions and return the packed
@@ -30,12 +32,16 @@ pub fn solve(dims: &HashMap<u32, (f64, f64)>, params: &Params) -> (Vec<Cell>, u3
     let aspects: HashMap<u32, f64> = dims.iter().map(|(id, (w, h))| (*id, w / h)).collect();
     let pool: Vec<u32> = dims.keys().copied().collect();
 
-    let max_images = params.max_images.min(pool.len()).max(1);
-    let min_images = params.min_images.min(max_images).max(1);
+    // Only force ids that actually exist in the pool.
+    let forced: Vec<u32> = params.forced.iter().copied().filter(|id| dims.contains_key(id)).collect();
+    let forced_set: HashSet<u32> = forced.iter().copied().collect();
+
+    let max_images = params.max_images.max(forced.len()).min(pool.len()).max(1);
+    let min_images = params.min_images.max(forced.len()).min(max_images).max(1);
 
     let mut rng = rand::thread_rng();
     let mut population: Vec<Individual> = (0..params.population_size.max(1))
-        .map(|_| create_random_individual(&pool, min_images, max_images, &mut rng))
+        .map(|_| create_random_individual(&pool, &forced, min_images, max_images, &mut rng))
         .collect();
     eval_all(&mut population, &aspects, dims, params.target_aspect, params.flex);
 
@@ -47,9 +53,9 @@ pub fn solve(dims: &HashMap<u32, (f64, f64)>, params: &Params) -> (Vec<Cell>, u3
         let mut next = elites.clone();
         while next.len() < population.len() {
             let mut child = elites.choose(&mut rng).unwrap().clone();
-            mutate(&mut child, &pool, min_images, max_images, params.allow_rotate, &mut rng);
+            mutate(&mut child, &pool, &forced_set, min_images, max_images, params.allow_rotate, &mut rng);
             while rng.gen::<f64>() < params.mutation_rate {
-                mutate(&mut child, &pool, min_images, max_images, params.allow_rotate, &mut rng);
+                mutate(&mut child, &pool, &forced_set, min_images, max_images, params.allow_rotate, &mut rng);
             }
             next.push(child);
         }

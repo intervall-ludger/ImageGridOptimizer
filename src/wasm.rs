@@ -22,6 +22,8 @@ struct InParams {
     generations: usize,
     mutation_rate: f64,
     width: u32,
+    #[serde(default)]
+    forced: Vec<u32>,
 }
 
 // Browser entry point: takes image dimensions and parameters as JSON, runs the
@@ -46,6 +48,7 @@ pub fn solve_collage(images_json: &str, params_json: &str) -> Result<String, JsE
         generations: p.generations,
         mutation_rate: p.mutation_rate,
         width: p.width,
+        forced: p.forced,
     };
 
     let (cells, width, height) = solve(&dims, &params);
