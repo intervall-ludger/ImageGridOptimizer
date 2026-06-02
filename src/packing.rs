@@ -8,6 +8,7 @@ pub enum Slot {
 }
 
 #[derive(Clone, Copy)]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize))]
 pub struct Cell {
     pub id: u32,
     pub x: u32,

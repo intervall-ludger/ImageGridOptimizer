@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ImageGridOptimizer</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>ImageGridOptimizer</h1>
+    <p>Drop images in, get a gap-free collage out. Everything runs locally in your browser.</p>
+  </header>
+
+  <main>
+    <section class="panel controls">
+      <label class="drop" id="drop">
+        <input type="file" id="files" accept="image/*" multiple hidden />
+        <span id="dropLabel">Click or drop images here</span>
+      </label>
+
+      <div class="row">
+        <label>Flex <output id="flexOut">1.00</output></label>
+        <input type="range" id="flex" min="0" max="1" step="0.05" value="1" />
+      </div>
+      <div class="row">
+        <label>Aspect (w/h) <output id="aspectOut">1.00</output></label>
+        <input type="range" id="aspect" min="0.3" max="3" step="0.05" value="1" />
+      </div>
+      <div class="row">
+        <label>Min images <output id="minOut">6</output></label>
+        <input type="range" id="min" min="1" max="60" step="1" value="6" />
+      </div>
+      <div class="row">
+        <label>Max images <output id="maxOut">30</output></label>
+        <input type="range" id="max" min="1" max="60" step="1" value="30" />
+      </div>
+      <div class="row checkbox">
+        <label><input type="checkbox" id="rotate" /> Allow 90° rotation</label>
+      </div>
+
+      <details>
+        <summary>Advanced</summary>
+        <div class="row"><label>Gutter px <output id="gutterOut">8</output></label><input type="range" id="gutter" min="0" max="40" step="1" value="8" /></div>
+        <div class="row"><label>Margin px <output id="marginOut">12</output></label><input type="range" id="margin" min="0" max="60" step="1" value="12" /></div>
+        <div class="row"><label>Width px <output id="widthOut">1600</output></label><input type="range" id="width" min="400" max="3000" step="100" value="1600" /></div>
+        <div class="row"><label>Population <output id="popOut">400</output></label><input type="range" id="pop" min="50" max="1000" step="50" value="400" /></div>
+        <div class="row"><label>Generations <output id="gensOut">400</output></label><input type="range" id="gens" min="50" max="1500" step="50" value="400" /></div>
+      </details>
+
+      <button id="generate" disabled>Generate collage</button>
+      <button id="download" disabled>Download</button>
+      <p class="status" id="status">Add some images to start.</p>
+    </section>
+
+    <section class="panel preview">
+      <canvas id="canvas"></canvas>
+    </section>
+  </main>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

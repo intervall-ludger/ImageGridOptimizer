@@ -2,7 +2,7 @@ use image::{DynamicImage, GenericImage, GenericImageView, Rgba};
 use image::imageops::FilterType;
 use std::collections::HashMap;
 
-use crate::packing::Cell;
+use collage_core::packing::Cell;
 
 pub fn create_collage(
     images: &HashMap<u32, DynamicImage>,

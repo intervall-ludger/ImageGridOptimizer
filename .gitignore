@@ -25,3 +25,6 @@ Cargo.lock
 
 # Program output artifact
 output.jpg
+
+# Generated WebAssembly build output
+/web/pkg/

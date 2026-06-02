@@ -2,19 +2,13 @@ use std::collections::HashMap;
 
 mod cli;
 mod image_handling;
-mod ga;
-mod packing;
 mod collage;
 
 use crate::cli::parse_args;
 use crate::image_handling::load_images;
-use crate::ga::{create_random_individual, evaluate_individual, mutate, Individual};
-use crate::packing::layout_cells;
 use crate::collage::create_collage;
+use collage_core::{solve, Params};
 use image::GenericImageView;
-use rand::seq::SliceRandom;
-use rand::Rng;
-use rayon::prelude::*;
 
 fn main() {
     let cfg = parse_args();
@@ -25,13 +19,6 @@ fn main() {
         return;
     }
 
-    let aspects: HashMap<u32, f64> = images_vec
-        .iter()
-        .map(|(id, img)| {
-            let (w, h) = img.dimensions();
-            (*id, w as f64 / h as f64)
-        })
-        .collect();
     let dims: HashMap<u32, (f64, f64)> = images_vec
         .iter()
         .map(|(id, img)| {
@@ -40,45 +27,21 @@ fn main() {
         })
         .collect();
     let image_map: HashMap<u32, image::DynamicImage> = images_vec.into_iter().collect();
-    let pool: Vec<u32> = image_map.keys().copied().collect();
 
-    let max_images = cfg.max_images.min(pool.len());
-    let min_images = cfg.min_images.min(max_images).max(1);
+    let params = Params {
+        target_aspect: cfg.target_aspect,
+        flex: cfg.flex,
+        min_images: cfg.min_images,
+        max_images: cfg.max_images,
+        allow_rotate: cfg.allow_rotate,
+        population_size: cfg.population_size,
+        generations: cfg.generations,
+        mutation_rate: cfg.mutation_rate,
+        width: cfg.width,
+    };
 
-    let mut rng = rand::thread_rng();
-    let mut population: Vec<Individual> = (0..cfg.population_size)
-        .map(|_| create_random_individual(&pool, min_images, max_images, &mut rng))
-        .collect();
-    population.par_iter_mut().for_each(|ind| evaluate_individual(ind, &aspects, &dims, cfg.target_aspect, cfg.flex));
-
-    for gen in 1..=cfg.generations {
-        population.sort_by(|a, b| b.fitness.total_cmp(&a.fitness));
-        if gen % 50 == 0 || gen == 1 {
-            println!("Generation {}: Best fitness = {:.5}", gen, population[0].fitness);
-        }
-
-        let half = (cfg.population_size / 2).max(1);
-        let elites = population[..half].to_vec();
-
-        let mut next = elites.clone();
-        while next.len() < cfg.population_size {
-            let mut child = elites.choose(&mut rng).unwrap().clone();
-            mutate(&mut child, &pool, min_images, max_images, cfg.allow_rotate, &mut rng);
-            while rng.gen::<f64>() < cfg.mutation_rate {
-                mutate(&mut child, &pool, min_images, max_images, cfg.allow_rotate, &mut rng);
-            }
-            next.push(child);
-        }
-
-        next.par_iter_mut().for_each(|ind| evaluate_individual(ind, &aspects, &dims, cfg.target_aspect, cfg.flex));
-        population = next;
-    }
-
-    population.sort_by(|a, b| b.fitness.total_cmp(&a.fitness));
-    let best = &population[0];
-    println!("Best solution fitness: {:.5}", best.fitness);
-
-    let (cells, content_w, content_h) = layout_cells(&best.tree, &aspects, &dims, cfg.flex, cfg.width);
+    println!("Packing {} images...", dims.len());
+    let (cells, content_w, content_h) = solve(&dims, &params);
 
     // Every image is used at most once: ids start unique and mutations only ever
     // pull from unused ids, so the layout can never repeat an image.
