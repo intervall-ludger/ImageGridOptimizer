@@ -1,4 +1,4 @@
-use image::{DynamicImage, Rgba, GenericImage, GenericImageView};
+use image::{DynamicImage, Rgba, GenericImage};
 use rect_packer::Rect;
 use std::collections::HashMap;
 

@@ -5,7 +5,7 @@ ImageGridOptimizer is a command-line utility that uses a Genetic Algorithm (GA) 
 **Still in Progress**
 
 ### Open Issues
-- [ ] Support additional image formats such as TIFF or other non-natively supported formats.
+- [x] Support additional image formats such as TIFF (handled via the `image` crate).
 
 ---
 
@@ -97,7 +97,7 @@ For a simpler test, consider a smaller run:
 .\target\release\ImageGridOptimizer .\_test_dir\ --min-images 10 --max-images 20
 ```
 
-This will create a collage using between 10 and 20 images from the `test_images` directory. The result look like:
+This will create a collage using between 10 and 20 images from the `_test_dir` directory. The result looks like:
 
 ![Collage Example](output.jpg)
 

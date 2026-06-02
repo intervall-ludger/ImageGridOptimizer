@@ -2,8 +2,8 @@ use clap::{App, Arg};
 
 pub fn parse_args() -> (String, Option<String>, Option<u32>, usize, usize, usize, usize, f64, f64) {
     let matches = App::new("ImageGridOptimizer GA")
-        .version("1.0")
-        .author("Senior Developer")
+        .version("2.0")
+        .author("Ludger Radke")
         .about("Optimizes the arrangement of images using a Genetic Algorithm.")
         .arg(
             Arg::with_name("DIRECTORY")
@@ -78,8 +78,8 @@ pub fn parse_args() -> (String, Option<String>, Option<u32>, usize, usize, usize
         .map(|w| w.parse::<u32>().expect("Invalid width"));
 
     // Default large values to handle large number of trials
-    let population_size = matches.value_of("pop_size").unwrap_or("1000").parse::<usize>().expect("Invalid population size");
-    let generations = matches.value_of("gens").unwrap_or("3000").parse::<usize>().expect("Invalid number of generations");
+    let population_size = matches.value_of("population_size").unwrap_or("1000").parse::<usize>().expect("Invalid population size");
+    let generations = matches.value_of("generations").unwrap_or("3000").parse::<usize>().expect("Invalid number of generations");
     let min_images = matches.value_of("min_images").unwrap_or("6").parse::<usize>().expect("Invalid min_images");
     let max_images = matches.value_of("max_images").unwrap_or("60").parse::<usize>().expect("Invalid max_images");
     let mutation_rate = matches.value_of("mutation_rate").unwrap_or("0.1").parse::<f64>().expect("Invalid mutation rate");
