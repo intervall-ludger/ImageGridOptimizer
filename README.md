@@ -2,6 +2,8 @@
 
 ImageGridOptimizer arranges a directory of images into a single, **gap-free** collage. A genetic algorithm evolves a **slicing tree** — a recursive horizontal/vertical partition of the canvas — so every image keeps its own aspect ratio while the cells tessellate the canvas with no holes by construction. It picks the best subset of the available images and runs in parallel via Rayon.
 
+**[Try it in your browser →](https://intervall-ludger.github.io/ImageGridOptimizer/)** — runs entirely client-side via WebAssembly; your images never leave the page.
+
 ![Collage Example](examples/medium.jpg)
 
 ## Key Features
@@ -13,6 +15,23 @@ ImageGridOptimizer arranges a directory of images into a single, **gap-free** co
 - **Controllable aspect ratio** — `--aspect` steers the overall width/height of the collage.
 - **Optional 90° rotation** — `--rotate` lets the GA flip images to pack extreme aspect ratios more tightly.
 - **Filtering & parallelism** — filter by extension or filename substring; fitness evaluation runs across all CPU cores.
+
+## Web app
+
+The same engine, compiled to WebAssembly, runs entirely in the browser — drop images in, tune the layout with live sliders, pin images you want to keep, and download the result. Nothing is uploaded.
+
+[**Open the web app**](https://intervall-ludger.github.io/ImageGridOptimizer/)
+
+| Desktop | Mobile |
+|:---:|:---:|
+| ![Web app on desktop](web/screenshots/desktop.png) | <img src="web/screenshots/mobile.png" alt="Web app on mobile" width="240" /> |
+
+Run it locally:
+
+```bash
+./build-web.sh                              # builds web/pkg via wasm-bindgen
+python3 -m http.server --directory web 8753 # then open http://localhost:8753/
+```
 
 ## How It Works
 
